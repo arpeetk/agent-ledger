@@ -1,0 +1,90 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Receipt {
+  id               String   @id @default(cuid())
+  receiptVersion   String   @default("0.1")
+  status           String   // pending_approval | executed | denied | failed
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  finalizedAt      DateTime?
+
+  // Session
+  sessionId        String
+  agentId          String
+  userId           String?
+  environment      String?
+
+  // Request
+  toolName         String
+  capability       String
+  riskLevel        String   // low | medium | high
+  riskReasons      String   // JSON array
+  intent           String?
+  argsHash         String   // sha256 of stableStringify(args)
+  redactedArgs     String   // JSON - safe metadata only
+
+  // Policy
+  policyId         String
+  policyDecision   String   // allow | deny | require_approval
+  matchedRules     String   // JSON array of rule IDs
+  policyExplanation String?
+
+  // Approval
+  approvalStatus   String?  // approved | denied | null
+  approvedBy       String?
+  approvalComment  String?
+  approvedAt       DateTime?
+
+  // Execution
+  executionStatus  String?  // success | failed | skipped
+  executionAttempts Int     @default(0)
+  idempotencyKey   String?
+  resultHash       String?
+  latencyMs        Int?
+
+  // Verification
+  verificationMethod String? // read_after_write | none
+  verificationStatus String? // verified | unverified | failed
+  verificationSnapshot String? // JSON redacted snapshot
+  diffSummary      String?
+
+  // Signature
+  signatureAlg     String?
+  publicKeyId      String?
+  signatureB64     String?
+
+  // Indexes
+  @@index([status])
+  @@index([sessionId])
+  @@index([idempotencyKey])
+  @@index([createdAt])
+}
+
+model Email {
+  id          String   @id @default(cuid())
+  messageId   String   @unique @default(cuid())
+  isDraft     Boolean  @default(false)
+  from        String
+  to          String   // JSON array
+  subject     String
+  bodyHash    String   // sha256 of body - never store full body
+  createdAt   DateTime @default(now())
+}
+
+model CalendarEvent {
+  id          String   @id @default(cuid())
+  eventId     String   @unique @default(cuid())
+  title       String
+  startTime   String
+  endTime     String
+  attendees   String   // JSON array
+  descriptionHash String // sha256 of description
+  createdAt   DateTime @default(now())
+}

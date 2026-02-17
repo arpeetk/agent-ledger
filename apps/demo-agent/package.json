@@ -1,0 +1,15 @@
+{
+  "name": "@agent-ledger/demo-agent",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "start": "tsx src/index.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^25.2.3",
+    "tsx": "^4.11.0",
+    "typescript": "^5.4.0"
+  }
+}

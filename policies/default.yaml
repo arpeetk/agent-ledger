@@ -1,0 +1,69 @@
+policy_id: default-v1
+
+defaults:
+  decision: require_approval
+
+params:
+  org_domains: ["mycompany.com"]
+
+rules:
+  - id: allow_reads
+    when:
+      capability: ["READ_ONLY"]
+    then:
+      decision: allow
+      reason: "Read-only operations are auto-allowed."
+
+  - id: allow_internal_email
+    when:
+      capability: ["EMAIL_SEND", "EMAIL_DRAFT"]
+      all:
+        - arg:
+            path: "$.to[*]"
+            matches: ".*@mycompany\\.com$"
+    then:
+      decision: allow
+      reason: "Internal emails are auto-allowed."
+
+  - id: external_email_needs_approval
+    when:
+      capability: ["EMAIL_SEND", "EMAIL_DRAFT"]
+      any:
+        - arg:
+            path: "$.to[*]"
+            matches: ".*@((?!mycompany\\.com$).)+"
+    then:
+      decision: require_approval
+      reason: "External recipients require approval."
+
+  - id: large_calendar_event
+    when:
+      capability: ["CALENDAR_WRITE"]
+      any:
+        - arg:
+            path: "$.attendees.length"
+            gt: 10
+    then:
+      decision: require_approval
+      reason: "Calendar events with many attendees require approval."
+
+  - id: deny_public_post
+    when:
+      capability: ["PUBLIC_POST"]
+    then:
+      decision: deny
+      reason: "Public posting is not allowed."
+
+  - id: deny_payments
+    when:
+      capability: ["PAYMENTS"]
+    then:
+      decision: deny
+      reason: "Payment operations are denied by default."
+
+  - id: deny_delete
+    when:
+      capability: ["DELETE"]
+    then:
+      decision: deny
+      reason: "Delete operations are denied by default."

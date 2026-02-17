@@ -1,0 +1,21 @@
+{
+  "name": "@agent-ledger/core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch"
+  },
+  "dependencies": {
+    "js-yaml": "^4.1.0",
+    "tweetnacl": "^1.0.3"
+  },
+  "devDependencies": {
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^25.2.3",
+    "typescript": "^5.4.0"
+  }
+}

@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.next/
+*.db
+*.db-journal
+.env
+.env.local
+*.tsbuildinfo
+next-env.d.ts
+**/receipts/*.jsonl
+!**/receipts/.gitkeep

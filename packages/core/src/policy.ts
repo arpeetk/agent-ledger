@@ -1,0 +1,149 @@
+import * as yaml from 'js-yaml';
+import type {
+  ArgPredicate,
+  Capability,
+  PolicyDecision,
+  PolicyFile,
+  PolicyResult,
+  PolicyRule,
+} from './types.js';
+
+export class PolicyEngine {
+  private policy: PolicyFile;
+
+  constructor(yamlContent: string) {
+    this.policy = yaml.load(yamlContent) as PolicyFile;
+  }
+
+  get policyId(): string {
+    return this.policy.policy_id;
+  }
+
+  get orgDomains(): string[] {
+    return this.policy.params?.org_domains ?? [];
+  }
+
+  evaluate(
+    capability: Capability,
+    toolName: string,
+    args: Record<string, unknown>,
+  ): PolicyResult {
+    const matchedRules: string[] = [];
+    let decision: PolicyDecision = this.policy.defaults.decision;
+    let explanation = `Default policy: ${decision}`;
+
+    for (const rule of this.policy.rules) {
+      if (this.ruleMatches(rule, capability, toolName, args)) {
+        matchedRules.push(rule.id);
+        decision = rule.then.decision;
+        explanation = rule.then.reason ?? `Matched rule: ${rule.id}`;
+      }
+    }
+
+    return {
+      decision,
+      matchedRuleIds: matchedRules,
+      explanation,
+      policyId: this.policy.policy_id,
+    };
+  }
+
+  private ruleMatches(
+    rule: PolicyRule,
+    capability: Capability,
+    toolName: string,
+    args: Record<string, unknown>,
+  ): boolean {
+    const when = rule.when;
+
+    // Check capability match
+    if (when.capability && !when.capability.includes(capability)) {
+      return false;
+    }
+
+    // Check tool match
+    if (when.tool && !when.tool.includes(toolName)) {
+      return false;
+    }
+
+    // Check "all" predicates (all must match)
+    if (when.all) {
+      const allMatch = when.all.every((pred) => this.evaluatePredicate(pred, args));
+      if (!allMatch) return false;
+    }
+
+    // Check "any" predicates (at least one must match)
+    if (when.any) {
+      const anyMatch = when.any.some((pred) => this.evaluatePredicate(pred, args));
+      if (!anyMatch) return false;
+    }
+
+    return true;
+  }
+
+  private evaluatePredicate(pred: ArgPredicate, args: Record<string, unknown>): boolean {
+    const { path, matches, gt, lt, max_len } = pred.arg;
+
+    const values = this.resolvePath(path, args);
+
+    if (matches !== undefined) {
+      const regex = new RegExp(matches);
+      return values.some((v) => typeof v === 'string' && regex.test(v));
+    }
+
+    if (gt !== undefined) {
+      return values.some((v) => typeof v === 'number' && v > gt);
+    }
+
+    if (lt !== undefined) {
+      return values.some((v) => typeof v === 'number' && v < lt);
+    }
+
+    if (max_len !== undefined) {
+      return values.some((v) => typeof v === 'string' && v.length > max_len);
+    }
+
+    return false;
+  }
+
+  /**
+   * Resolve a JSONPath-like expression.
+   * Supports: $.field, $.field[*], $.field.length
+   */
+  private resolvePath(path: string, args: Record<string, unknown>): unknown[] {
+    // Remove leading "$."
+    const stripped = path.startsWith('$.') ? path.slice(2) : path;
+
+    // Handle .length suffix
+    if (stripped.endsWith('.length')) {
+      const fieldPath = stripped.slice(0, -7); // remove ".length"
+      const val = this.getNestedValue(fieldPath.replace(/\[\*\]/g, ''), args);
+      if (Array.isArray(val)) return [val.length];
+      if (typeof val === 'string') return [val.length];
+      return [];
+    }
+
+    // Handle [*] wildcard
+    if (stripped.includes('[*]')) {
+      const fieldPath = stripped.replace(/\[\*\]/g, '');
+      const val = this.getNestedValue(fieldPath, args);
+      if (Array.isArray(val)) return val;
+      return [];
+    }
+
+    const val = this.getNestedValue(stripped, args);
+    return val !== undefined ? [val] : [];
+  }
+
+  private getNestedValue(path: string, obj: Record<string, unknown>): unknown {
+    const parts = path.split('.').filter(Boolean);
+    let current: unknown = obj;
+    for (const part of parts) {
+      if (current === null || current === undefined || typeof current !== 'object') {
+        return undefined;
+      }
+      current = (current as Record<string, unknown>)[part];
+    }
+    return current;
+  }
+}
