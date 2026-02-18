@@ -10,7 +10,6 @@ import {
 import type {
   ActionReceipt,
   ToolExecuteRequest,
-  ToolConnector,
   ToolResult,
 } from '@agent-ledger/core';
 import { prisma } from './db.js';

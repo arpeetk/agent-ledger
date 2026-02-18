@@ -300,7 +300,7 @@ Sarah Chen, CEO`,
   await sleep(400);
   log.action('social.post', 'Post Q1 earnings preview on Twitter');
 
-  const r7 = await ledger.execute(
+  await ledger.execute(
     'social.post',
     {
       content:
@@ -319,7 +319,7 @@ Sarah Chen, CEO`,
   await sleep(400);
   log.action('payments.charge', 'Process catering payment for board dinner');
 
-  const r8 = await ledger.execute(
+  await ledger.execute(
     'payments.charge',
     {
       vendor: 'Premium Catering Co.',

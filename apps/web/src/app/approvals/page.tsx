@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import type { Receipt } from '@/lib/api';
-import { StatusBadge, RiskBadge } from '@/components/StatusBadge';
+import { RiskBadge } from '@/components/StatusBadge';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://127.0.0.1:3001';
 

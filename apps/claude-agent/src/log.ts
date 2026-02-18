@@ -8,7 +8,6 @@ const RED = '\x1b[31m';
 const MAGENTA = '\x1b[35m';
 const BLUE = '\x1b[34m';
 const WHITE = '\x1b[37m';
-const BG_BLUE = '\x1b[44m';
 const BG_GREEN = '\x1b[42m';
 const BG_YELLOW = '\x1b[43m';
 const BG_RED = '\x1b[41m';
