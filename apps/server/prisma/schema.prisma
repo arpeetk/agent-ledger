@@ -88,3 +88,35 @@ model CalendarEvent {
   descriptionHash String // sha256 of description
   createdAt   DateTime @default(now())
 }
+
+model SlackMessage {
+  id          String   @id @default(cuid())
+  messageId   String   @unique @default(cuid())
+  channel     String
+  from        String
+  text        String   // stored for mock; in prod would be hash only
+  threadTs    String?
+  createdAt   DateTime @default(now())
+}
+
+model GitHubIssue {
+  id          String   @id @default(cuid())
+  issueId     String   @unique @default(cuid())
+  repo        String
+  title       String
+  bodyHash    String
+  labels      String   // JSON array
+  assignees   String   // JSON array
+  state       String   @default("open")
+  createdAt   DateTime @default(now())
+}
+
+model FileShare {
+  id          String   @id @default(cuid())
+  shareId     String   @unique @default(cuid())
+  fileName    String
+  sharedWith  String   // JSON array of emails
+  permission  String   // view | edit
+  owner       String
+  createdAt   DateTime @default(now())
+}

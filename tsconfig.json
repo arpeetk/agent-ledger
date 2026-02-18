@@ -3,7 +3,9 @@
   "references": [
     { "path": "packages/core" },
     { "path": "packages/connectors" },
+    { "path": "packages/sdk" },
     { "path": "apps/server" },
-    { "path": "apps/demo-agent" }
+    { "path": "apps/demo-agent" },
+    { "path": "apps/claude-agent" }
   ]
 }

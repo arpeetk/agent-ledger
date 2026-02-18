@@ -67,3 +67,54 @@ rules:
     then:
       decision: deny
       reason: "Delete operations are denied by default."
+
+  - id: allow_internal_slack
+    when:
+      tool: ["slack.send_message"]
+      all:
+        - arg:
+            path: "$.channel"
+            matches: "^#(general|engineering|team|standup|random)$"
+    then:
+      decision: allow
+      reason: "Internal Slack channels are auto-allowed."
+
+  - id: external_slack_needs_approval
+    when:
+      tool: ["slack.send_message"]
+      any:
+        - arg:
+            path: "$.channel"
+            matches: "^#(external|partner|client)"
+    then:
+      decision: require_approval
+      reason: "Messages to external-facing Slack channels require approval."
+
+  - id: github_issue_allowed
+    when:
+      tool: ["github.create_issue"]
+    then:
+      decision: allow
+      reason: "Creating GitHub issues is allowed."
+
+  - id: file_share_external
+    when:
+      capability: ["FILE_SHARE"]
+      any:
+        - arg:
+            path: "$.sharedWith[*]"
+            matches: ".*@((?!mycompany\\.com$).)+"
+    then:
+      decision: require_approval
+      reason: "Sharing files with external users requires approval."
+
+  - id: file_share_internal
+    when:
+      capability: ["FILE_SHARE"]
+      all:
+        - arg:
+            path: "$.sharedWith[*]"
+            matches: ".*@mycompany\\.com$"
+    then:
+      decision: allow
+      reason: "Sharing files internally is auto-allowed."

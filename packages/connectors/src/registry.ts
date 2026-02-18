@@ -2,6 +2,9 @@ import type { PrismaClient } from '@prisma/client';
 import type { ToolConnector } from '@agent-ledger/core';
 import { GmailSendConnector, GmailCreateDraftConnector } from './gmail.js';
 import { CalendarCreateEventConnector } from './calendar.js';
+import { SlackSendMessageConnector } from './slack.js';
+import { GitHubCreateIssueConnector } from './github.js';
+import { FileShareConnector } from './file-share.js';
 
 export class ConnectorRegistry {
   private connectors: Map<string, ToolConnector> = new Map();
@@ -10,9 +13,12 @@ export class ConnectorRegistry {
     this.register(new GmailSendConnector(prisma));
     this.register(new GmailCreateDraftConnector(prisma));
     this.register(new CalendarCreateEventConnector(prisma));
+    this.register(new SlackSendMessageConnector(prisma));
+    this.register(new GitHubCreateIssueConnector(prisma));
+    this.register(new FileShareConnector(prisma));
   }
 
-  private register(connector: ToolConnector) {
+  register(connector: ToolConnector) {
     this.connectors.set(connector.name, connector);
   }
 

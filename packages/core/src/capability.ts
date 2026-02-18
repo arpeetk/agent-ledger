@@ -11,6 +11,8 @@ const TOOL_CAPABILITY_MAP: Record<string, Capability> = {
   'gmail.get_message': 'READ_ONLY',
   'calendar.create_event': 'CALENDAR_WRITE',
   'calendar.get_event': 'READ_ONLY',
+  'slack.send_message': 'EMAIL_SEND',
+  'github.create_issue': 'CALENDAR_WRITE',
   'file.share': 'FILE_SHARE',
   'file.delete': 'DELETE',
   'social.post': 'PUBLIC_POST',
