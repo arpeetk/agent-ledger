@@ -399,7 +399,13 @@ packages/
   sdk/             TypeScript SDK — AgentLedger client with approval polling + events
   connectors/      Mock tool connectors (Gmail, Calendar, Slack, GitHub, File Share)
 policies/          YAML policy files
-docs/              Architecture, receipts, policy, threat model
+examples/          Integration patterns (Anthropic, OpenAI, programmatic approval)
+docs/
+  architecture.md  System architecture and data flow
+  sdk.md           SDK reference and integration guide
+  receipts.md      Receipt schema, signing, verification
+  policy.md        Policy authoring guide
+  threat-model.md  Security threat analysis
 ```
 
 ---
