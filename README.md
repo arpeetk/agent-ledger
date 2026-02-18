@@ -420,6 +420,20 @@ See [`docs/threat-model.md`](docs/threat-model.md) for the full analysis.
 
 ---
 
+## More Examples
+
+The `examples/` directory contains integration patterns for popular AI frameworks:
+
+| Example | Description |
+|---------|-------------|
+| [`examples/anthropic-agent.ts`](examples/anthropic-agent.ts) | Integrate with Anthropic Claude's tool_use |
+| [`examples/openai-agent.ts`](examples/openai-agent.ts) | Integrate with OpenAI GPT function calling |
+| [`examples/programmatic-approval.ts`](examples/programmatic-approval.ts) | Build an automated approval bot |
+
+See [`docs/sdk.md`](docs/sdk.md) for the full SDK reference.
+
+---
+
 ## Roadmap
 
 - [ ] MCP gateway adapter (intercept any MCP server)
