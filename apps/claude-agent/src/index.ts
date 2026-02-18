@@ -1,7 +1,9 @@
 import { AgentLedger } from '@agent-ledger/sdk';
+import type { ExecuteResult } from '@agent-ledger/sdk';
 import * as log from './log.js';
 
 const SERVER_URL = process.env.SERVER_URL ?? 'http://127.0.0.1:3001';
+const WAIT_FOR_APPROVAL = process.argv.includes('--wait');
 
 const stats = { allowed: 0, denied: 0, pending: 0, total: 0 };
 
@@ -15,41 +17,33 @@ const ledger = new AgentLedger({
   },
   approvalTimeoutMs: 120_000,
   pollIntervalMs: 2_000,
-
-  onPendingApproval: (event) => {
-    stats.pending++;
-    log.pendingApproval(event.approvalUrl);
-  },
-  onReceiptFinalized: (event) => {
-    if (event.status === 'executed') {
-      log.approved(event.receiptId);
-    }
-  },
-  onDenied: (event) => {
-    stats.denied++;
-    log.denied(event.reason);
-  },
 });
 
 function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
 
+function handleResult(result: ExecuteResult): void {
+  if (result.status === 'executed') {
+    stats.allowed++;
+    log.allowed(result.receiptId);
+  } else if (result.status === 'denied') {
+    stats.denied++;
+    log.denied(result.error ?? 'Denied by policy');
+  } else if (result.status === 'pending_approval') {
+    stats.pending++;
+    log.pendingApproval('http://localhost:3000/approvals');
+  }
+}
+
 /**
- * Simulates a multi-step AI research assistant preparing for a
+ * Simulates Claude as an AI research assistant preparing for a
  * quarterly board meeting. Demonstrates how Agent Ledger intercepts,
- * classifies, and governs every tool call.
+ * classifies, and governs every tool call across 6 different connectors.
  *
- * Scenario:
- *   Sarah asks Claude to prepare the Q1 board meeting. Claude needs to:
- *   1. Post a Slack update to #general (auto-allowed: internal channel)
- *   2. Send meeting notes email to the team (auto-allowed: internal email)
- *   3. Draft an investor update to external stakeholders (requires approval)
- *   4. Create a GitHub issue to track action items (auto-allowed)
- *   5. Schedule the board meeting with 15 attendees (requires approval: >10 people)
- *   6. Share the board deck with an external board member (requires approval)
- *   7. Attempt to post earnings preview on social media (denied: public posting)
- *   8. Attempt to process a payment (denied: payments blocked)
+ * Run modes:
+ *   npm run demo:claude          → non-blocking (shows all 8 steps immediately)
+ *   npm run demo:claude -- --wait → blocks on approval steps (approve in the web UI)
  */
 async function main(): Promise<void> {
   log.banner();
@@ -65,15 +59,23 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
+  if (WAIT_FOR_APPROVAL) {
+    log.info('Running in interactive mode — will wait for human approval in the UI.');
+  } else {
+    log.info('Running in demo mode — approval-required steps will not block.');
+    log.info('Use --wait flag to block and approve in the UI: npm run demo:claude -- --wait');
+  }
+  log.info('');
   log.info('Sarah asks: "Claude, please prepare everything for our Q1 board meeting."');
   log.info('Claude begins planning the board meeting preparation...');
   await sleep(800);
 
   const TOTAL_STEPS = 8;
+  const noWait = !WAIT_FOR_APPROVAL;
 
   // ── Step 1: Slack update ──────────────────────────────────────────────────
   log.step(1, TOTAL_STEPS, 'Post team update on Slack');
-  log.thinking('I should let the team know we\'re preparing for the board meeting.');
+  log.thinking("I should let the team know we're preparing for the board meeting.");
   await sleep(400);
   log.action('slack.send_message', 'Post board meeting prep update to #general');
 
@@ -81,16 +83,13 @@ async function main(): Promise<void> {
     'slack.send_message',
     {
       channel: '#general',
-      text: 'Hey team! Starting Q1 board meeting prep. I\'ll be sending out materials and scheduling the meeting shortly. Please have your department updates ready by EOD Thursday.',
+      text: "Hey team! Starting Q1 board meeting prep. I'll be sending out materials and scheduling the meeting shortly. Please have your department updates ready by EOD Thursday.",
       from: 'claude-assistant',
     },
     { intent: 'Notify the team about board meeting preparation kickoff' },
   );
   stats.total++;
-  if (r1.status === 'executed') {
-    stats.allowed++;
-    log.allowed(r1.receiptId);
-  }
+  handleResult(r1);
 
   await sleep(600);
 
@@ -130,17 +129,14 @@ Claude (on behalf of Sarah)`,
     { intent: 'Send board meeting agenda and prep checklist to leadership team' },
   );
   stats.total++;
-  if (r2.status === 'executed') {
-    stats.allowed++;
-    log.allowed(r2.receiptId);
-  }
+  handleResult(r2);
 
   await sleep(600);
 
   // ── Step 3: External investor email draft ─────────────────────────────────
   log.step(3, TOTAL_STEPS, 'Draft investor update email');
   log.thinking(
-    'The investors need a quarterly update. External recipients — this will likely need human approval before sending.',
+    'The investors need a quarterly update. External recipients — this will likely need human approval.',
   );
   await sleep(400);
   log.action('gmail.create_draft', 'Draft quarterly update for external investors');
@@ -148,11 +144,7 @@ Claude (on behalf of Sarah)`,
   const r3 = await ledger.execute(
     'gmail.create_draft',
     {
-      to: [
-        'john.smith@sequoia-capital.com',
-        'emily.chen@a16z.com',
-        'raj.patel@greylock.com',
-      ],
+      to: ['john.smith@sequoia-capital.com', 'emily.chen@a16z.com', 'raj.patel@greylock.com'],
       subject: 'MyCompany Q1 2025 — Quarterly Board Update',
       body: `Dear Board Members,
 
@@ -169,19 +161,18 @@ Full deck and financials are attached. Looking forward to discussing at the boar
 Best regards,
 Sarah Chen, CEO`,
     },
-    { intent: 'Draft quarterly investor update email with financial highlights' },
+    { intent: 'Draft quarterly investor update email with financial highlights', noWait },
   );
   stats.total++;
-  if (r3.status === 'executed') {
-    stats.allowed++;
-    log.allowed(r3.receiptId);
-  }
+  handleResult(r3);
 
   await sleep(600);
 
   // ── Step 4: GitHub issue for action items ─────────────────────────────────
   log.step(4, TOTAL_STEPS, 'Create GitHub issue for action items');
-  log.thinking('I should track the board meeting action items in GitHub so nothing falls through the cracks.');
+  log.thinking(
+    'I should track the board meeting action items in GitHub so nothing falls through the cracks.',
+  );
   await sleep(400);
   log.action('github.create_issue', 'Create tracking issue for board meeting action items');
 
@@ -215,17 +206,14 @@ Sarah Chen, CEO`,
     { intent: 'Create GitHub issue to track board meeting preparation tasks' },
   );
   stats.total++;
-  if (r4.status === 'executed') {
-    stats.allowed++;
-    log.allowed(r4.receiptId);
-  }
+  handleResult(r4);
 
   await sleep(600);
 
   // ── Step 5: Schedule board meeting with many attendees ────────────────────
   log.step(5, TOTAL_STEPS, 'Schedule board meeting (15 attendees)');
   log.thinking(
-    'The board meeting has 15 attendees including external board members. The policy will probably flag this for approval.',
+    'The board meeting has 15 attendees including external board members. Policy will likely flag this.',
   );
   await sleep(400);
   log.action('calendar.create_event', 'Schedule Q1 board meeting with all attendees');
@@ -254,22 +242,23 @@ Sarah Chen, CEO`,
         'diana.kraft@independent-director.com',
       ],
       description:
-        'Q1 2025 Board Meeting. Agenda: Financial review, product roadmap, engineering velocity, hiring plan, Q&A. Zoom: https://zoom.us/j/123456789',
+        'Q1 2025 Board Meeting. Agenda: Financial review, product roadmap, engineering velocity, hiring plan, Q&A.',
     },
-    { intent: 'Schedule quarterly board meeting with leadership team and external board members' },
+    {
+      intent:
+        'Schedule quarterly board meeting with leadership team and external board members',
+      noWait,
+    },
   );
   stats.total++;
-  if (r5.status === 'executed') {
-    stats.allowed++;
-    log.allowed(r5.receiptId);
-  }
+  handleResult(r5);
 
   await sleep(600);
 
   // ── Step 6: Share board deck with external member ─────────────────────────
   log.step(6, TOTAL_STEPS, 'Share board deck with external board member');
   log.thinking(
-    'Brian needs access to the board deck. He\'s external — file sharing with external users will need approval.',
+    "Brian needs access to the board deck. He's external — file sharing with external users will need approval.",
   );
   await sleep(400);
   log.action('file.share', 'Share board deck PDF with external board member');
@@ -282,25 +271,25 @@ Sarah Chen, CEO`,
       permission: 'view',
       owner: 'sarah@mycompany.com',
     },
-    { intent: 'Share confidential board deck with external board advisor (view-only)' },
+    {
+      intent: 'Share confidential board deck with external board advisor (view-only)',
+      noWait,
+    },
   );
   stats.total++;
-  if (r6.status === 'executed') {
-    stats.allowed++;
-    log.allowed(r6.receiptId);
-  }
+  handleResult(r6);
 
   await sleep(600);
 
   // ── Step 7: Attempt social media post (DENIED) ───────────────────────────
   log.step(7, TOTAL_STEPS, 'Post earnings preview on social media');
   log.thinking(
-    'Sarah mentioned we could share a teaser about the strong quarter. Let me try posting a preview...',
+    'Sarah mentioned we could share a teaser about the strong quarter. Let me try posting...',
   );
   await sleep(400);
   log.action('social.post', 'Post Q1 earnings preview on Twitter');
 
-  await ledger.execute(
+  const r7 = await ledger.execute(
     'social.post',
     {
       content:
@@ -310,16 +299,19 @@ Sarah Chen, CEO`,
     { intent: 'Post Q1 earnings preview on social media before board meeting' },
   );
   stats.total++;
+  handleResult(r7);
 
   await sleep(600);
 
   // ── Step 8: Attempt payment (DENIED) ──────────────────────────────────────
   log.step(8, TOTAL_STEPS, 'Process catering payment for board dinner');
-  log.thinking('We need to pay the caterer for the board dinner. Let me try processing the payment...');
+  log.thinking(
+    'We need to pay the caterer for the board dinner. Let me try processing the payment...',
+  );
   await sleep(400);
   log.action('payments.charge', 'Process catering payment for board dinner');
 
-  await ledger.execute(
+  const r8 = await ledger.execute(
     'payments.charge',
     {
       vendor: 'Premium Catering Co.',
@@ -330,6 +322,7 @@ Sarah Chen, CEO`,
     { intent: 'Process payment for board meeting dinner catering service' },
   );
   stats.total++;
+  handleResult(r8);
 
   await sleep(400);
 
@@ -340,15 +333,18 @@ Sarah Chen, CEO`,
   log.info('');
   log.info('  - Slack update posted to #general (auto-allowed)');
   log.info('  - Team agenda email sent to 4 internal recipients (auto-allowed)');
-  log.info('  - Investor email drafted for 3 external recipients (needed approval)');
+  log.info('  - Investor email drafted for 3 external recipients (awaiting approval)');
   log.info('  - GitHub issue created for tracking prep tasks (auto-allowed)');
-  log.info('  - Board meeting scheduled with 15 attendees (needed approval)');
-  log.info('  - Board deck shared with external advisor (needed approval)');
+  log.info('  - Board meeting scheduled with 15 attendees (awaiting approval)');
+  log.info('  - Board deck shared with external advisor (awaiting approval)');
   log.info('  - Social media earnings post blocked by policy (denied)');
   log.info('  - Payment processing blocked by policy (denied)');
   log.info('');
   log.info('Every action above generated a signed, tamper-evident receipt.');
-  log.info('The full audit trail is available at http://localhost:3000');
+  log.info('View the full audit trail at: http://localhost:3000');
+  if (stats.pending > 0) {
+    log.info(`Approve ${stats.pending} pending action(s) at: http://localhost:3000/approvals`);
+  }
   console.log();
 }
 
