@@ -13,6 +13,7 @@ import { getKeyPair } from './keys.js';
 import { getPolicyEngine } from './policy-loader.js';
 import { appendToLedger } from './ledger.js';
 import { ConnectorRegistry } from '@agent-ledger/connectors';
+import { emitWebhook } from './webhooks.js';
 
 const registry = new ConnectorRegistry(prisma);
 
@@ -92,10 +93,38 @@ export async function executeToolCall(req: ToolExecuteRequest): Promise<{
     );
     const signed = signReceipt(actionReceipt, getKeyPair());
     await finalizeReceipt(receipt.id, signed);
+    emitWebhook({
+      event: 'receipt.denied',
+      timestamp: new Date().toISOString(),
+      data: {
+        receiptId: receipt.id,
+        toolName: req.toolName,
+        capability,
+        riskLevel: risk.level,
+        policyDecision: 'deny',
+        sessionId: req.session.sessionId,
+        agentId: req.session.agentId,
+        policyExplanation: policy.explanation,
+      },
+    });
     return { status: 'denied', receiptId: receipt.id, error: policy.explanation };
   }
 
   if (policy.decision === 'require_approval') {
+    emitWebhook({
+      event: 'receipt.pending_approval',
+      timestamp: new Date().toISOString(),
+      data: {
+        receiptId: receipt.id,
+        toolName: req.toolName,
+        capability,
+        riskLevel: risk.level,
+        policyDecision: 'require_approval',
+        sessionId: req.session.sessionId,
+        agentId: req.session.agentId,
+        policyExplanation: policy.explanation,
+      },
+    });
     return { status: 'pending_approval', receiptId: receipt.id };
   }
 
@@ -135,6 +164,20 @@ export async function executeToolCall(req: ToolExecuteRequest): Promise<{
   );
   const signed = signReceipt(actionReceipt, getKeyPair());
   await finalizeReceipt(receipt.id, signed);
+
+  emitWebhook({
+    event: 'receipt.executed',
+    timestamp: new Date().toISOString(),
+    data: {
+      receiptId: receipt.id,
+      toolName: req.toolName,
+      capability,
+      riskLevel: risk.level,
+      policyDecision: 'allow',
+      sessionId: req.session.sessionId,
+      agentId: req.session.agentId,
+    },
+  });
 
   return { status: 'executed', receiptId: receipt.id, result: result.data };
 }

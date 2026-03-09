@@ -8,6 +8,7 @@ import type { ActionReceipt } from '@agent-ledger/core';
 import { getKeyPair } from '../lib/keys.js';
 import { executeApprovedAction } from '../lib/executor.js';
 import { appendToLedger } from '../lib/ledger.js';
+import { emitWebhook } from '../lib/webhooks.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const LEDGER_PATH = join(__dirname, '../../receipts/ledger.jsonl');
@@ -190,6 +191,21 @@ export async function receiptRoutes(app: FastifyInstance) {
     });
     appendToLedger(signed);
 
+    emitWebhook({
+      event: 'receipt.approved',
+      timestamp: new Date().toISOString(),
+      data: {
+        receiptId: receipt.id,
+        toolName: receipt.toolName,
+        capability: receipt.capability,
+        riskLevel: receipt.riskLevel,
+        policyDecision: receipt.policyDecision,
+        sessionId: receipt.sessionId,
+        agentId: receipt.agentId,
+        approvedBy,
+      },
+    });
+
     return {
       status: 'approved',
       receiptId: receipt.id,
@@ -238,6 +254,21 @@ export async function receiptRoutes(app: FastifyInstance) {
       },
     });
     appendToLedger(signed);
+
+    emitWebhook({
+      event: 'receipt.approval_denied',
+      timestamp: new Date().toISOString(),
+      data: {
+        receiptId: receipt.id,
+        toolName: receipt.toolName,
+        capability: receipt.capability,
+        riskLevel: receipt.riskLevel,
+        policyDecision: receipt.policyDecision,
+        sessionId: receipt.sessionId,
+        agentId: receipt.agentId,
+        approvedBy,
+      },
+    });
 
     return { status: 'denied', receiptId: receipt.id };
   });
