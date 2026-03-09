@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type { Receipt } from '@/lib/api';
 import { ReceiptCard } from '@/components/ReceiptCard';
+import { useSSE } from '@/lib/useSSE';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://127.0.0.1:3001';
 
@@ -11,20 +12,22 @@ export default function TimelinePage() {
   const [filter, setFilter] = useState<string>('');
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const load = async () => {
-      const params = new URLSearchParams();
-      if (filter) params.set('status', filter);
-      const res = await fetch(`${API_URL}/receipts?${params}`);
-      const json = await res.json();
-      setReceipts(json.data ?? []);
-      setLoading(false);
-    };
-
-    load();
-    const interval = setInterval(load, 2000);
-    return () => clearInterval(interval);
+  const load = useCallback(async () => {
+    const params = new URLSearchParams();
+    if (filter) params.set('status', filter);
+    const res = await fetch(`${API_URL}/receipts?${params}`);
+    const json = await res.json();
+    setReceipts(json.data ?? []);
+    setLoading(false);
   }, [filter]);
+
+  // Initial load and on filter change
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  // Real-time updates via SSE (falls back to polling)
+  useSSE(load);
 
   return (
     <div>

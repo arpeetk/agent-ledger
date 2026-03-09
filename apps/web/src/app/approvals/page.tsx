@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type { Receipt } from '@/lib/api';
 import { RiskBadge } from '@/components/StatusBadge';
+import { useSSE } from '@/lib/useSSE';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://127.0.0.1:3001';
 
@@ -13,17 +14,19 @@ export default function ApprovalsPage() {
   const [comment, setComment] = useState('');
   const [acting, setActing] = useState(false);
 
-  useEffect(() => {
-    const load = async () => {
-      const res = await fetch(`${API_URL}/receipts?status=pending_approval`);
-      const json = await res.json();
-      setReceipts(json.data ?? []);
-      setLoading(false);
-    };
-    load();
-    const interval = setInterval(load, 2000);
-    return () => clearInterval(interval);
+  const load = useCallback(async () => {
+    const res = await fetch(`${API_URL}/receipts?status=pending_approval`);
+    const json = await res.json();
+    setReceipts(json.data ?? []);
+    setLoading(false);
   }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  // Real-time updates via SSE
+  useSSE(load);
 
   const selected = receipts.find((r) => r.id === selectedId);
 
@@ -38,10 +41,7 @@ export default function ApprovalsPage() {
     setActing(false);
     setSelectedId(null);
     setComment('');
-    // Refresh
-    const res = await fetch(`${API_URL}/receipts?status=pending_approval`);
-    const json = await res.json();
-    setReceipts(json.data ?? []);
+    await load();
   }
 
   return (
