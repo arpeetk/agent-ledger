@@ -1,0 +1,42 @@
+{
+  "name": "@agent-ledger/adapter-mcp",
+  "version": "0.1.0",
+  "description": "MCP (Model Context Protocol) adapter for Agent Ledger — expose policy-gated tools as an MCP server.",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch"
+  },
+  "dependencies": {
+    "@agent-ledger/sdk": "*",
+    "@modelcontextprotocol/sdk": "^1.12.1"
+  },
+  "peerDependencies": {
+    "@modelcontextprotocol/sdk": ">=1.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@modelcontextprotocol/sdk": {
+      "optional": false
+    }
+  },
+  "devDependencies": {
+    "@types/node": "^25.2.3",
+    "typescript": "^5.4.0"
+  },
+  "license": "Apache-2.0",
+  "keywords": [
+    "agent-ledger",
+    "mcp",
+    "model-context-protocol",
+    "tool-use",
+    "policy"
+  ]
+}

@@ -208,6 +208,50 @@ const safeTools = wrapLangChainTools(ledger, [sendEmailTool, createEventTool]);
 // Use safeTools with your LangChain agent
 ```
 
+### MCP (Model Context Protocol)
+
+Expose policy-gated tools as an MCP server. Works with Claude Desktop, Cursor, and any MCP client.
+
+```typescript
+import { AgentLedger } from '@agent-ledger/sdk';
+import { createMcpServer } from '@agent-ledger/adapter-mcp';
+
+const ledger = new AgentLedger({
+  session: { agentId: 'mcp-agent', userId: 'user-1' },
+});
+
+const { start } = createMcpServer(ledger, {
+  send_email: {
+    description: 'Send an email',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        to: { type: 'string' },
+        subject: { type: 'string' },
+        body: { type: 'string' },
+      },
+      required: ['to', 'subject', 'body'],
+    },
+    handler: async ({ to, subject }) => ({ sent: true, to, subject }),
+  },
+});
+
+await start(); // Starts MCP server over stdio
+```
+
+Add to your Claude Desktop config (`claude_desktop_config.json`):
+
+```json
+{
+  "mcpServers": {
+    "agent-ledger": {
+      "command": "node",
+      "args": ["./my-mcp-server.js"]
+    }
+  }
+}
+```
+
 ---
 
 ## CLI
@@ -325,6 +369,7 @@ packages/
   adapter-vercel-ai/  Vercel AI SDK adapter
   adapter-anthropic/  Anthropic Claude tool_use adapter
   adapter-langchain/  LangChain adapter
+  adapter-mcp/        MCP (Model Context Protocol) adapter
   cli/              CLI launcher (npx agent-ledger)
 policies/           YAML policy files
 docs/               Architecture, receipts, policy, threat model
