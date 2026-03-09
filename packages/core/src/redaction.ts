@@ -34,7 +34,11 @@ export function redactArgs(args: Record<string, unknown>): RedactionResult {
     if (REDACTED_FIELDS.includes(key)) {
       redacted[`${key}_hash`] = hashValue(value);
       fieldsRedacted.push(key);
-    } else if (SAFE_FIELDS.includes(key) || typeof value === 'number' || typeof value === 'boolean') {
+    } else if (
+      SAFE_FIELDS.includes(key) ||
+      typeof value === 'number' ||
+      typeof value === 'boolean'
+    ) {
       redacted[key] = value;
     } else if (typeof value === 'string' && value.length <= 200) {
       redacted[key] = value;

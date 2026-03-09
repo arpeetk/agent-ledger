@@ -8,7 +8,7 @@ Policies are YAML files that define what an agent is allowed to do. The PolicyEn
 policy_id: org-email-policy
 defaults:
   decision: deny
-  reason: "No matching rule; denied by default"
+  reason: 'No matching rule; denied by default'
 params:
   org_domains:
     - acme.com
@@ -22,17 +22,17 @@ rules:
           matches: "^.+@(acme\\.com|acme\\.io)$"
     then:
       decision: allow
-      reason: "Internal recipients only"
+      reason: 'Internal recipients only'
 ```
 
 ### Top-Level Fields
 
-| Field | Required | Description |
-|---|---|---|
-| `policy_id` | yes | Unique identifier for this policy. |
-| `defaults` | yes | The decision applied when no rule matches. Must include `decision` and `reason`. |
-| `params` | no | Named values reusable across rules (e.g. `org_domains`). |
-| `rules` | yes | Ordered list of rules. First match wins. |
+| Field       | Required | Description                                                                      |
+| ----------- | -------- | -------------------------------------------------------------------------------- |
+| `policy_id` | yes      | Unique identifier for this policy.                                               |
+| `defaults`  | yes      | The decision applied when no rule matches. Must include `decision` and `reason`. |
+| `params`    | no       | Named values reusable across rules (e.g. `org_domains`).                         |
+| `rules`     | yes      | Ordered list of rules. First match wins.                                         |
 
 ## Rule Structure
 
@@ -47,38 +47,38 @@ Each rule has three parts: an `id`, a `when` block that defines match conditions
         gt: 10
   then:
     decision: require_approval
-    reason: "Large meetings need approval"
+    reason: 'Large meetings need approval'
 ```
 
 ### `when` Block
 
-| Field | Description |
-|---|---|
+| Field        | Description                                                                       |
+| ------------ | --------------------------------------------------------------------------------- |
 | `capability` | The classified capability string to match (e.g. `email:send`, `calendar:create`). |
-| `tool` | Match against the raw tool name instead of the classified capability. |
-| `all` | List of arg predicates. All must pass. |
-| `any` | List of arg predicates. At least one must pass. |
+| `tool`       | Match against the raw tool name instead of the classified capability.             |
+| `all`        | List of arg predicates. All must pass.                                            |
+| `any`        | List of arg predicates. At least one must pass.                                   |
 
 You can combine `capability` (or `tool`) with `all` and/or `any` in the same rule. The capability/tool check is always evaluated first.
 
 ### `then` Block
 
-| Field | Description |
-|---|---|
-| `decision` | One of `allow`, `deny`, or `require_approval`. |
-| `reason` | Human-readable explanation. Included in the receipt. |
+| Field      | Description                                          |
+| ---------- | ---------------------------------------------------- |
+| `decision` | One of `allow`, `deny`, or `require_approval`.       |
+| `reason`   | Human-readable explanation. Included in the receipt. |
 
 ## Arg Predicates
 
 Arg predicates inspect the arguments of a tool call using a JSON path and an operator.
 
-| Field | Description |
-|---|---|
-| `path` | JSON path into the call arguments. Supports `$.field`, `$.field[*]` (all elements), and `$.field.length` (array length). |
-| `matches` | Regex the value must match. Applied per-element for array paths. |
-| `gt` | Value must be greater than this number. |
-| `lt` | Value must be less than this number. |
-| `max_len` | String length must not exceed this number. |
+| Field     | Description                                                                                                              |
+| --------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `path`    | JSON path into the call arguments. Supports `$.field`, `$.field[*]` (all elements), and `$.field.length` (array length). |
+| `matches` | Regex the value must match. Applied per-element for array paths.                                                         |
+| `gt`      | Value must be greater than this number.                                                                                  |
+| `lt`      | Value must be less than this number.                                                                                     |
+| `max_len` | String length must not exceed this number.                                                                               |
 
 When `path` targets an array with `[*]`, the predicate is applied to every element. For `all` blocks, every element must satisfy the predicate. For `any` blocks, at least one element must satisfy it.
 
@@ -103,7 +103,7 @@ The PolicyEngine expands `org_domains` into a regex pattern that rules can refer
 policy_id: email-policy
 defaults:
   decision: deny
-  reason: "Unmatched email action"
+  reason: 'Unmatched email action'
 params:
   org_domains:
     - acme.com
@@ -116,7 +116,7 @@ rules:
           gt: 10485760
     then:
       decision: deny
-      reason: "Attachments must be under 10 MB"
+      reason: 'Attachments must be under 10 MB'
 
   - id: allow-internal
     when:
@@ -126,14 +126,14 @@ rules:
           matches: "^.+@acme\\.com$"
     then:
       decision: allow
-      reason: "Internal recipient"
+      reason: 'Internal recipient'
 
   - id: approve-external
     when:
       capability: email:send
     then:
       decision: require_approval
-      reason: "External recipients require approval"
+      reason: 'External recipients require approval'
 ```
 
 ### Calendar: deny events longer than 8 hours
@@ -147,7 +147,7 @@ rules:
         gt: 480
   then:
     decision: deny
-    reason: "Events longer than 8 hours are not allowed"
+    reason: 'Events longer than 8 hours are not allowed'
 ```
 
 ### Deny any tool call with a body exceeding 50,000 characters
@@ -160,7 +160,7 @@ rules:
         max_len: 50000
   then:
     decision: deny
-    reason: "Body exceeds maximum length"
+    reason: 'Body exceeds maximum length'
 ```
 
 ## Evaluation Order

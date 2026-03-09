@@ -9,6 +9,7 @@ If you discover a security vulnerability in `agent-ledger`, please report it res
 Instead, email: **security@example.com** (replace with your actual security contact).
 
 Include:
+
 - Description of the vulnerability
 - Steps to reproduce
 - Potential impact

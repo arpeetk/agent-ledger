@@ -3,6 +3,11 @@
   "references": [
     { "path": "packages/core" },
     { "path": "packages/connectors" },
+    { "path": "packages/sdk" },
+    { "path": "packages/adapter-vercel-ai" },
+    { "path": "packages/adapter-anthropic" },
+    { "path": "packages/adapter-langchain" },
+    { "path": "packages/cli" },
     { "path": "apps/server" },
     { "path": "apps/demo-agent" }
   ]

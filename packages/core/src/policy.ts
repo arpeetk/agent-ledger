@@ -23,11 +23,7 @@ export class PolicyEngine {
     return this.policy.params?.org_domains ?? [];
   }
 
-  evaluate(
-    capability: Capability,
-    toolName: string,
-    args: Record<string, unknown>,
-  ): PolicyResult {
+  evaluate(capability: Capability, toolName: string, args: Record<string, unknown>): PolicyResult {
     const matchedRules: string[] = [];
     let decision: PolicyDecision = this.policy.defaults.decision;
     let explanation = `Default policy: ${decision}`;

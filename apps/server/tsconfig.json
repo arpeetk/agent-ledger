@@ -6,8 +6,5 @@
     "composite": true
   },
   "include": ["src"],
-  "references": [
-    { "path": "../../packages/core" },
-    { "path": "../../packages/connectors" }
-  ]
+  "references": [{ "path": "../../packages/core" }, { "path": "../../packages/connectors" }]
 }

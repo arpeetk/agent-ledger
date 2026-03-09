@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
+import Link from 'next/link';
 import type { Receipt } from '@/lib/api';
 import { StatusBadge, RiskBadge, VerificationBadge } from '@/components/StatusBadge';
 
@@ -35,16 +36,25 @@ export default function ReceiptPage() {
 
   return (
     <div className="max-w-3xl">
+      <div className="mb-4">
+        <Link href="/" className="text-sm text-gray-500 hover:text-gray-700">
+          &larr; Back to Timeline
+        </Link>
+      </div>
+
       <div className="flex items-center gap-3 mb-6">
         <h1 className="text-2xl font-bold">Receipt</h1>
         <StatusBadge status={receipt.status} />
         {verified !== null && (
           <span
-            className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${
-              verified ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+            className={`inline-flex items-center gap-1 px-2.5 py-1 rounded text-xs font-medium ${
+              verified
+                ? 'bg-green-100 text-green-800 border border-green-200'
+                : 'bg-red-100 text-red-800 border border-red-200'
             }`}
           >
-            {verified ? 'Signature valid' : 'Signature invalid'}
+            <span className="text-base">{verified ? '\u2713' : '\u2717'}</span>
+            {verified ? 'Signature verified' : 'Signature invalid'}
           </span>
         )}
       </div>
@@ -73,7 +83,7 @@ export default function ReceiptPage() {
           {receipt.intent && <Field label="Intent" value={receipt.intent} />}
           <div>
             <span className="text-xs text-gray-500">Redacted Args</span>
-            <pre className="text-xs bg-gray-50 p-2 rounded mt-1 overflow-auto">
+            <pre className="text-xs bg-gray-50 p-3 rounded mt-1 overflow-auto border border-gray-100 font-mono">
               {JSON.stringify(receipt.redactedArgs, null, 2)}
             </pre>
           </div>
@@ -81,7 +91,7 @@ export default function ReceiptPage() {
 
         <Section title="Policy">
           <Field label="Decision" value={receipt.policyDecision} />
-          <Field label="Matched Rules" value={receipt.matchedRules.join(', ') || 'none'} />
+          <Field label="Matched Rules" value={receipt.matchedRules.join(', ') || '(none)'} />
           {receipt.policyExplanation && (
             <Field label="Explanation" value={receipt.policyExplanation} />
           )}
@@ -111,6 +121,17 @@ export default function ReceiptPage() {
             {receipt.diffSummary && <Field label="Summary" value={receipt.diffSummary} />}
           </Section>
         )}
+
+        {receipt.signatureB64 && (
+          <Section title="Signature">
+            <div>
+              <span className="text-xs text-gray-500">Signature (base64)</span>
+              <pre className="text-xs bg-gray-50 p-2 rounded mt-1 overflow-auto border border-gray-100 font-mono break-all">
+                {receipt.signatureB64}
+              </pre>
+            </div>
+          </Section>
+        )}
       </div>
     </div>
   );
@@ -118,8 +139,8 @@ export default function ReceiptPage() {
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="p-4">
-      <h2 className="text-sm font-semibold text-gray-900 mb-3">{title}</h2>
+    <div className="p-5">
+      <h2 className="text-sm font-semibold text-gray-900 mb-3 uppercase tracking-wider">{title}</h2>
       <div className="space-y-2">{children}</div>
     </div>
   );
@@ -129,7 +150,9 @@ function Field({ label, value, mono }: { label: string; value: string; mono?: bo
   return (
     <div className="flex items-start gap-2">
       <span className="text-xs text-gray-500 w-28 shrink-0">{label}</span>
-      <span className={`text-sm ${mono ? 'font-mono' : ''}`}>{value}</span>
+      <span className={`text-sm ${mono ? 'font-mono text-gray-700' : 'text-gray-900'}`}>
+        {value}
+      </span>
     </div>
   );
 }

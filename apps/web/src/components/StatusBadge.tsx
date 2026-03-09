@@ -25,9 +25,7 @@ export function StatusBadge({ status }: { status: string }) {
 export function RiskBadge({ level }: { level: string }) {
   const color = RISK_COLORS[level] ?? 'bg-gray-100 text-gray-700';
   return (
-    <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${color}`}>
-      {level}
-    </span>
+    <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${color}`}>{level}</span>
   );
 }
 

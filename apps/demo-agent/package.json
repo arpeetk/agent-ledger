@@ -5,7 +5,11 @@
   "type": "module",
   "scripts": {
     "build": "tsc",
-    "start": "tsx src/index.ts"
+    "start": "tsx src/index.ts",
+    "start:sdk": "tsx src/sdk-demo.ts"
+  },
+  "dependencies": {
+    "@agent-ledger/sdk": "*"
   },
   "devDependencies": {
     "@types/node": "^25.2.3",

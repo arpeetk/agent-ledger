@@ -7,12 +7,7 @@ import {
   hashValue,
   signReceipt,
 } from '@agent-ledger/core';
-import type {
-  ActionReceipt,
-  ToolExecuteRequest,
-  ToolConnector,
-  ToolResult,
-} from '@agent-ledger/core';
+import type { ActionReceipt, ToolExecuteRequest, ToolResult } from '@agent-ledger/core';
 import { prisma } from './db.js';
 import { getKeyPair } from './keys.js';
 import { getPolicyEngine } from './policy-loader.js';
@@ -59,7 +54,12 @@ export async function executeToolCall(req: ToolExecuteRequest): Promise<{
   // Create receipt record BEFORE execution
   const receipt = await prisma.receipt.create({
     data: {
-      status: policy.decision === 'allow' ? 'executed' : policy.decision === 'deny' ? 'denied' : 'pending_approval',
+      status:
+        policy.decision === 'allow'
+          ? 'executed'
+          : policy.decision === 'deny'
+            ? 'denied'
+            : 'pending_approval',
       sessionId: req.session.sessionId,
       agentId: req.session.agentId,
       userId: req.session.userId,
@@ -71,6 +71,7 @@ export async function executeToolCall(req: ToolExecuteRequest): Promise<{
       intent: req.intent,
       argsHash,
       redactedArgs: JSON.stringify(redactedArgs),
+      fieldsRedacted: JSON.stringify(fieldsRedacted),
       policyId: policy.policyId,
       policyDecision: policy.decision,
       matchedRules: JSON.stringify(policy.matchedRuleIds),
@@ -80,7 +81,15 @@ export async function executeToolCall(req: ToolExecuteRequest): Promise<{
   });
 
   if (policy.decision === 'deny') {
-    const actionReceipt = buildActionReceipt(receipt, req, capability, risk, policy, redactedArgs, fieldsRedacted);
+    const actionReceipt = buildActionReceipt(
+      receipt,
+      req,
+      capability,
+      risk,
+      policy,
+      redactedArgs,
+      fieldsRedacted,
+    );
     const signed = signReceipt(actionReceipt, getKeyPair());
     await finalizeReceipt(receipt.id, signed);
     return { status: 'denied', receiptId: receipt.id, error: policy.explanation };
@@ -113,7 +122,17 @@ export async function executeToolCall(req: ToolExecuteRequest): Promise<{
   });
 
   const updatedReceipt = await prisma.receipt.findUniqueOrThrow({ where: { id: receipt.id } });
-  const actionReceipt = buildActionReceipt(updatedReceipt, req, capability, risk, policy, redactedArgs, fieldsRedacted, result, verification);
+  const actionReceipt = buildActionReceipt(
+    updatedReceipt,
+    req,
+    capability,
+    risk,
+    policy,
+    redactedArgs,
+    fieldsRedacted,
+    result,
+    verification,
+  );
   const signed = signReceipt(actionReceipt, getKeyPair());
   await finalizeReceipt(receipt.id, signed);
 
@@ -208,9 +227,17 @@ async function verifyExecution(
         diffSummary: `Created ${toolName} artifact ${result.artifactId}`,
       };
     }
-    return { method: 'read_after_write', status: 'failed', diffSummary: 'Artifact not found after write' };
+    return {
+      method: 'read_after_write',
+      status: 'failed',
+      diffSummary: 'Artifact not found after write',
+    };
   } catch {
-    return { method: 'read_after_write', status: 'failed', diffSummary: 'Verification read failed' };
+    return {
+      method: 'read_after_write',
+      status: 'failed',
+      diffSummary: 'Verification read failed',
+    };
   }
 }
 
@@ -224,7 +251,12 @@ function buildActionReceipt(
   redactedArgs: Record<string, unknown>,
   fieldsRedacted: string[],
   executionResult?: ToolResult & { attempts: number; latencyMs: number },
-  verification?: { method: string; status: string; snapshot?: Record<string, unknown>; diffSummary?: string },
+  verification?: {
+    method: string;
+    status: string;
+    snapshot?: Record<string, unknown>;
+    diffSummary?: string;
+  },
 ): ActionReceipt {
   return {
     receipt_version: '0.1',
@@ -299,6 +331,183 @@ async function finalizeReceipt(receiptId: string, signed: ActionReceipt): Promis
     },
   });
   appendToLedger(signed);
+}
+
+/**
+ * Evaluate a tool call without executing it.
+ * Returns the policy decision and a receipt ID for tracking.
+ * Used by the SDK in "evaluate" mode where execution happens client-side.
+ */
+export async function evaluateToolCall(req: ToolExecuteRequest): Promise<{
+  decision: 'allow' | 'deny' | 'require_approval';
+  receiptId: string;
+  policyExplanation: string;
+  capability: string;
+  riskLevel: string;
+  riskReasons: string[];
+  matchedRules: string[];
+}> {
+  const engine = getPolicyEngine();
+  const capability = getCapability(req.toolName);
+  const risk = assessRisk(capability, req.args, engine.orgDomains);
+  const policy = engine.evaluate(capability, req.toolName, req.args);
+  const { redactedArgs, fieldsRedacted } = redactArgs(req.args);
+  const argsHash = hashValue(stableStringify(req.args));
+  const idempotencyKey = computeIdempotencyKey(req.session.sessionId, req.toolName, req.args);
+
+  // Check idempotency
+  const existing = await prisma.receipt.findFirst({
+    where: { idempotencyKey, executionStatus: 'success' },
+  });
+  if (existing) {
+    return {
+      decision: 'allow',
+      receiptId: existing.id,
+      policyExplanation: 'Idempotent replay of previously executed action',
+      capability,
+      riskLevel: risk.level,
+      riskReasons: risk.reasons,
+      matchedRules: [],
+    };
+  }
+
+  const status =
+    policy.decision === 'allow'
+      ? 'awaiting_execution'
+      : policy.decision === 'deny'
+        ? 'denied'
+        : 'pending_approval';
+
+  const receipt = await prisma.receipt.create({
+    data: {
+      status,
+      sessionId: req.session.sessionId,
+      agentId: req.session.agentId,
+      userId: req.session.userId,
+      environment: req.session.environment,
+      toolName: req.toolName,
+      capability,
+      riskLevel: risk.level,
+      riskReasons: JSON.stringify(risk.reasons),
+      intent: req.intent,
+      argsHash,
+      redactedArgs: JSON.stringify(redactedArgs),
+      fieldsRedacted: JSON.stringify(fieldsRedacted),
+      policyId: policy.policyId,
+      policyDecision: policy.decision,
+      matchedRules: JSON.stringify(policy.matchedRuleIds),
+      policyExplanation: policy.explanation,
+      idempotencyKey,
+    },
+  });
+
+  // For deny, finalize and sign immediately
+  if (policy.decision === 'deny') {
+    const actionReceipt = buildActionReceipt(
+      receipt,
+      req,
+      capability,
+      risk,
+      policy,
+      redactedArgs,
+      fieldsRedacted,
+    );
+    const signed = signReceipt(actionReceipt, getKeyPair());
+    await finalizeReceipt(receipt.id, signed);
+  }
+
+  return {
+    decision: policy.decision,
+    receiptId: receipt.id,
+    policyExplanation: policy.explanation,
+    capability,
+    riskLevel: risk.level,
+    riskReasons: risk.reasons,
+    matchedRules: policy.matchedRuleIds,
+  };
+}
+
+/**
+ * Report the result of a client-side tool execution.
+ * Finalizes the receipt with execution data and signs it.
+ */
+export async function reportExecution(
+  receiptId: string,
+  report: {
+    success: boolean;
+    result?: Record<string, unknown>;
+    error?: string;
+    latencyMs?: number;
+  },
+): Promise<{ receiptId: string; status: string }> {
+  const receipt = await prisma.receipt.findUnique({ where: { id: receiptId } });
+  if (!receipt) throw new Error('Receipt not found');
+  if (receipt.status !== 'awaiting_execution' && receipt.status !== 'executed') {
+    throw new Error(`Cannot report execution for receipt in status: ${receipt.status}`);
+  }
+
+  const resultHash = report.result ? hashValue(stableStringify(report.result)) : null;
+  const finalStatus = report.success ? 'executed' : 'failed';
+
+  await prisma.receipt.update({
+    where: { id: receiptId },
+    data: {
+      status: finalStatus,
+      executionStatus: report.success ? 'success' : 'failed',
+      executionAttempts: 1,
+      resultHash,
+      latencyMs: report.latencyMs,
+      finalizedAt: new Date(),
+    },
+  });
+
+  const updated = await prisma.receipt.findUniqueOrThrow({ where: { id: receiptId } });
+  const redactedArgs = JSON.parse(updated.redactedArgs);
+  const fieldsRedacted = updated.fieldsRedacted ? JSON.parse(updated.fieldsRedacted) : [];
+  const riskReasons = JSON.parse(updated.riskReasons);
+  const matchedRules = JSON.parse(updated.matchedRules);
+
+  const actionReceipt: ActionReceipt = {
+    receipt_version: '0.1',
+    receipt_id: updated.id,
+    timestamp: updated.createdAt.toISOString(),
+    session: {
+      sessionId: updated.sessionId,
+      agentId: updated.agentId,
+      userId: updated.userId ?? undefined,
+      environment: updated.environment ?? undefined,
+    },
+    request: {
+      tool_name: updated.toolName,
+      capability: updated.capability as ActionReceipt['request']['capability'],
+      risk: {
+        level: updated.riskLevel as ActionReceipt['request']['risk']['level'],
+        reasons: riskReasons,
+      },
+      intent: updated.intent ?? undefined,
+      args_hash: updated.argsHash,
+      redacted_args: redactedArgs,
+    },
+    policy: {
+      policy_id: updated.policyId,
+      decision: updated.policyDecision as ActionReceipt['policy']['decision'],
+      matched_rules: matchedRules,
+      explanation: updated.policyExplanation ?? '',
+    },
+    execution: {
+      status: report.success ? 'success' : 'failed',
+      attempts: 1,
+      idempotency_key: updated.idempotencyKey ?? '',
+      result_hash: resultHash ?? undefined,
+      latency_ms: report.latencyMs,
+    },
+    redaction: { fields_redacted: fieldsRedacted },
+  };
+
+  const signed = signReceipt(actionReceipt, getKeyPair());
+  await finalizeReceipt(receiptId, signed);
+
+  return { receiptId, status: finalStatus };
 }
 
 function sleep(ms: number): Promise<void> {

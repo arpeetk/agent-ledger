@@ -2,7 +2,7 @@
 
 **Policy-gated tool execution for AI agents, with approvals, verification, and signed action receipts.**
 
-`agent-ledger` is a control plane that sits between an AI agent and its tools/APIs. It enforces **allow/deny/require-approval** policies, executes tool calls with **idempotency**, verifies outcomes (tiered), and emits **tamper-evident, signed "Action Receipts"** you can audit, reconcile, and debug.
+`agent-ledger` is a control plane that sits between an AI agent and its tools/APIs. It enforces **allow/deny/require-approval** policies, executes tool calls with **idempotency**, verifies outcomes, and emits **tamper-evident, signed "Action Receipts"** you can audit, reconcile, and debug.
 
 > Mental model: **Terraform plan/apply + OPA-style policy + Stripe receipts — for agent actions.**
 
@@ -14,7 +14,7 @@ As agents start taking real actions (send emails, create calendar events, share 
 
 - **Was this action allowed under policy?**
 - **Who approved it (if required)?**
-- **What actually changed in the outside world?**
+- **What actually changed?**
 - **Can we prove it later?**
 - **How do we debug "why did the agent do that?"**
 
@@ -22,99 +22,227 @@ As agents start taking real actions (send emails, create calendar events, share 
 
 ---
 
-## What it does
+## Quickstart
 
-For every tool call, `agent-ledger`:
+### 1. Install & setup
 
-1. **Intercepts** the request (SDK wrapper or HTTP gateway)
-2. Maps tool → **capability** (e.g. `EMAIL_SEND`, `CALENDAR_WRITE`)
-3. Computes a **risk classification** (e.g. `external_recipient`, `contains_link`)
-4. Evaluates a **policy** (YAML): `allow | deny | require_approval`
-5. If `require_approval`, creates a **pending receipt** and waits
-6. Executes with **idempotency + retries**
-7. **Verifies** outcome (tiered: read-after-write, diffs)
-8. Finalizes a **signed Action Receipt** + appends to an immutable JSONL ledger
-
----
-
-## Screens / UX
-
-- **Timeline**: all receipts with status badges and filters
-- **Approvals Inbox**: pending actions that require human decision
-- **Receipt Viewer**: full receipt (policy match, approval, proof, signature verification)
-
----
-
-## Quickstart (local)
-
-### Prerequisites
-- Node.js 20+
-- npm (v9+ recommended)
-
-### Install
 ```bash
 npm install
-```
-
-### Setup database (SQLite)
-
-```bash
 npm run db:push
-```
-
-### Run dev (server + web)
-
-```bash
 npm run dev
 ```
 
-* Server: [http://localhost:3001](http://localhost:3001)
-* Web UI: [http://localhost:3000](http://localhost:3000)
+Server: http://localhost:3001 · Dashboard: http://localhost:3000
 
-### Run the demo agent
-
-In another terminal:
+### 2. Run the demo
 
 ```bash
-npm run demo
+npm run demo        # Gateway mode (server executes tools)
+npm run demo:sdk    # SDK mode (local execution, policy via server)
 ```
-
-The demo agent will:
-
-* send an internal email (auto-allowed)
-* create an external email draft (requires approval)
-* create a calendar event with many attendees (requires approval)
-* attempt a public post (denied)
-
-Approve/deny in the UI:
-
-* Approvals page: [http://localhost:3000/approvals](http://localhost:3000/approvals)
 
 ---
 
-## How it integrates
+## SDK Integration (3 lines)
 
-### Option A: SDK wrapper (lowest friction)
+The fastest way to add Agent Ledger to your agent:
 
-Wrap your agent's tool executor with `ToolRouter.execute(...)`.
+```typescript
+import { AgentLedger } from '@agent-ledger/sdk';
 
-### Option B: HTTP tool gateway
+const ledger = new AgentLedger({
+  session: { agentId: 'my-agent', userId: 'user-123' },
+});
 
-Your agent calls the server's `POST /tools/execute` endpoint. The gateway enforces policy, writes receipts, and executes connectors.
+// Wrap any tool function — calls are routed through Agent Ledger
+const safeSendEmail = ledger.wrap('gmail.send', sendEmail);
 
-### Option C: MCP gateway (recommended for platform adoption)
+const result = await safeSendEmail({
+  to: ['bob@example.com'],
+  subject: 'Hello',
+  body: 'Hi Bob',
+});
+// result.status: 'executed' | 'denied' | 'pending_approval'
+// result.receiptId: 'clx...'
+// result.result: { sent: true, ... }
+```
 
-Place `agent-ledger` in front of your MCP server(s) to intercept all tool calls without changing agent code.
+### SDK modes
 
-> This repo ships an HTTP gateway MVP. SDK/MCP adapters can be added as thin layers over the same core.
+- **Local mode** (default): SDK evaluates policy via server, executes tools locally, reports results back.
+- **Gateway mode**: SDK sends tool calls to server, which executes via registered connectors.
+
+```typescript
+// Local mode (default) — your code runs the tool
+const ledger = new AgentLedger({
+  session: { agentId: 'my-agent' },
+  mode: 'local',
+});
+
+// Gateway mode — server runs the tool via connectors
+const ledger = new AgentLedger({
+  session: { agentId: 'my-agent' },
+  mode: 'gateway',
+});
+```
+
+### Approval handling
+
+```typescript
+// Wait for approval (default — blocks until approved/denied)
+const safe = ledger.wrap('gmail.send', sendEmail, { onApproval: 'wait' });
+
+// Throw immediately when approval is needed
+const safe = ledger.wrap('gmail.send', sendEmail, { onApproval: 'throw' });
+
+// Return pending result without blocking
+const safe = ledger.wrap('gmail.send', sendEmail, { onApproval: 'skip' });
+```
+
+### Wrap multiple tools at once
+
+```typescript
+const tools = ledger.wrapAll({
+  'gmail.send': sendEmail,
+  'gmail.create_draft': createDraft,
+  'calendar.create_event': createEvent,
+});
+
+const result = await tools['gmail.send']({
+  to: ['alice@co.com'],
+  subject: 'Hi',
+});
+```
+
+### Event callbacks
+
+```typescript
+const ledger = new AgentLedger({
+  session: { agentId: 'my-agent' },
+  onPendingApproval: (e) => console.log(`Awaiting approval: ${e.receiptId}`),
+  onDenied: (e) => console.log(`Denied: ${e.toolName} — ${e.policyExplanation}`),
+  onExecuted: (e) => console.log(`Done: ${e.toolName} in ${e.latencyMs}ms`),
+});
+```
+
+---
+
+## Framework Adapters
+
+### Vercel AI SDK
+
+```typescript
+import { tool } from 'ai';
+import { AgentLedger } from '@agent-ledger/sdk';
+import { withLedger } from '@agent-ledger/adapter-vercel-ai';
+
+const ledger = new AgentLedger({ session: { agentId: 'my-agent' } });
+
+const tools = withLedger(ledger, {
+  sendEmail: tool({
+    description: 'Send an email',
+    parameters: z.object({
+      to: z.string(),
+      subject: z.string(),
+      body: z.string(),
+    }),
+    execute: async ({ to, subject, body }) => {
+      // Your email logic
+      return { sent: true };
+    },
+  }),
+});
+// Use `tools` with generateText / streamText as normal
+```
+
+### Anthropic Claude (tool_use)
+
+```typescript
+import Anthropic from '@anthropic-ai/sdk';
+import { AgentLedger } from '@agent-ledger/sdk';
+import { createToolProcessor } from '@agent-ledger/adapter-anthropic';
+
+const ledger = new AgentLedger({ session: { agentId: 'claude-agent' } });
+
+const processor = createToolProcessor(ledger, {
+  send_email: {
+    definition: {
+      name: 'send_email',
+      description: 'Send an email',
+      input_schema: {
+        type: 'object',
+        properties: {
+          to: { type: 'string' },
+          subject: { type: 'string' },
+        },
+        required: ['to', 'subject'],
+      },
+    },
+    handler: async ({ to, subject }) => ({ sent: true, to, subject }),
+  },
+});
+
+// Pass definitions to Claude
+const response = await anthropic.messages.create({
+  model: 'claude-sonnet-4-20250514',
+  tools: processor.definitions(),
+  messages: [
+    /* ... */
+  ],
+});
+
+// Process tool_use blocks from response
+const toolResults = await processor.processAll(toolUseBlocks);
+```
+
+### LangChain
+
+```typescript
+import { AgentLedger } from '@agent-ledger/sdk';
+import { wrapLangChainTools } from '@agent-ledger/adapter-langchain';
+
+const ledger = new AgentLedger({
+  session: { agentId: 'langchain-agent' },
+});
+const safeTools = wrapLangChainTools(ledger, [sendEmailTool, createEventTool]);
+// Use safeTools with your LangChain agent
+```
+
+---
+
+## CLI
+
+```bash
+# Start server + dashboard
+npx agent-ledger start
+
+# Server only
+npx agent-ledger server
+
+# Generate signing keys
+npx agent-ledger keygen
+
+# Options
+npx agent-ledger start --port 3001 --web-port 3000 --no-web
+```
+
+---
+
+## Dashboard
+
+The web UI at http://localhost:3000 provides:
+
+- **Timeline**: All receipts with status filters and search
+- **Approvals**: Pending actions with approve/deny controls
+- **Sessions**: Group receipts by agent session with visual timeline
+- **Stats**: Policy hit rates, risk distribution, tool usage, verification rates
+- **Receipt Viewer**: Full receipt detail with signature verification badge
 
 ---
 
 ## Policy (YAML)
 
-Policies live under `./policies/`.
-
-Example: require approval for external emails; deny public posting:
+Policies live under `./policies/`. Example:
 
 ```yaml
 policy_id: default-v1
@@ -122,102 +250,129 @@ defaults:
   decision: require_approval
 
 params:
-  org_domains: ["mycompany.com"]
+  org_domains: ['mycompany.com']
 
 rules:
   - id: allow_reads
     when:
-      capability: ["READ_ONLY"]
+      capability: ['READ_ONLY']
     then:
       decision: allow
 
   - id: deny_public_post
     when:
-      capability: ["PUBLIC_POST"]
+      capability: ['PUBLIC_POST']
     then:
       decision: deny
-      reason: "No public posting."
+      reason: 'No public posting.'
 
   - id: external_email_needs_approval
     when:
-      capability: ["EMAIL_SEND", "EMAIL_DRAFT"]
+      capability: ['EMAIL_SEND', 'EMAIL_DRAFT']
       any:
         - arg:
-            path: "$.to[*]"
-            matches: ".*@((?!mycompany\\.com$).)+"
+            path: '$.to[*]'
+            matches: '.*@((?!mycompany\.com$).)+'
     then:
       decision: require_approval
-      reason: "External recipients require approval."
+      reason: 'External recipients require approval.'
 ```
 
-See [`docs/policy.md`](docs/policy.md) for full syntax and examples.
+See [`docs/policy.md`](docs/policy.md) for full syntax.
 
 ---
 
-## Action Receipts
+## Architecture
 
-Every action produces a signed receipt with:
+```
+┌──────────────┐     ┌──────────────────┐     ┌────────────────┐
+│   AI Agent   │────▶│   Agent Ledger   │────▶│  Tool / API    │
+│  (your code) │     │  (control plane) │     │  (gmail, cal)  │
+└──────────────┘     └──────────────────┘     └────────────────┘
+                           │
+            ┌──────────────┼──────────────┐
+            ▼              ▼              ▼
+     ┌──────────┐  ┌──────────┐  ┌────────────┐
+     │  Policy  │  │ Receipts │  │ Dashboard  │
+     │  Engine  │  │ (signed) │  │ (approval) │
+     └──────────┘  └──────────┘  └────────────┘
+```
 
-* policy decision + matched rule IDs
-* approval metadata (who/when/comment)
-* execution metadata (idempotency, hashes, latency)
-* verification/proof status
+For every tool call:
 
-Receipts are stored in:
+1. **Intercept** → map to capability + assess risk
+2. **Evaluate policy** → allow / deny / require_approval
+3. **If approval needed** → pause, wait for human decision in dashboard
+4. **Execute** with idempotency + retries
+5. **Verify** outcome (read-after-write)
+6. **Sign** and emit an Action Receipt to the immutable ledger
 
-* SQLite (queryable)
-* Append-only JSONL ledger at `apps/server/receipts/ledger.jsonl`
-
-See [`docs/receipts.md`](docs/receipts.md) for schema and signing/verification details.
+See [`docs/architecture.md`](docs/architecture.md) for details.
 
 ---
 
-## Security / Threat model
+## Project Layout
 
-This project is designed to reduce real-world agent risk:
+```
+apps/
+  server/           Fastify API (tool gateway + policy + receipts)
+  web/              Next.js dashboard (timeline, approvals, sessions, stats)
+  demo-agent/       Demo scripts showing SDK and gateway usage
+packages/
+  core/             Policy engine, risk classifier, signing, stable-stringify
+  sdk/              SDK client — wrap any tool with policy-gated execution
+  connectors/       Mocked tool connectors (gmail, calendar) with DB persistence
+  adapter-vercel-ai/  Vercel AI SDK adapter
+  adapter-anthropic/  Anthropic Claude tool_use adapter
+  adapter-langchain/  LangChain adapter
+  cli/              CLI launcher (npx agent-ledger)
+policies/           YAML policy files
+docs/               Architecture, receipts, policy, threat model
+```
 
-* **prompt injection** / untrusted content steering tool use
-* **confused deputy**: model has broad tool access
-* **data exfiltration** via outbound tools
-* **irreversible actions** without auditability
+---
+
+## API Endpoints
+
+| Endpoint                     | Method | Description                         |
+| ---------------------------- | ------ | ----------------------------------- |
+| `POST /tools/execute`        | POST   | Gateway: evaluate + execute         |
+| `POST /tools/evaluate`       | POST   | Evaluate policy only (for SDK)      |
+| `POST /receipts/:id/report`  | POST   | Report client-side execution result |
+| `GET /receipts`              | GET    | List receipts (filterable)          |
+| `GET /receipts/:id`          | GET    | Get single receipt                  |
+| `GET /receipts/:id/verify`   | GET    | Verify receipt signature            |
+| `POST /receipts/:id/approve` | POST   | Approve pending action              |
+| `POST /receipts/:id/deny`    | POST   | Deny pending action                 |
+| `GET /stats`                 | GET    | Aggregated statistics               |
+| `GET /health`                | GET    | Health check                        |
+
+---
+
+## Security / Threat Model
+
+- **Prompt injection**: Policy layer prevents untrusted content from escalating tool access
+- **Confused deputy**: Capability classification + risk assessment before execution
+- **Data exfiltration**: Redaction policy prevents sensitive data from leaking to receipts
+- **Irreversible actions**: Approval workflow for high-risk operations
 
 See [`docs/threat-model.md`](docs/threat-model.md).
 
-Report security issues: see [`SECURITY.md`](SECURITY.md).
-
 ---
 
-## Project layout
+## Roadmap
 
-```text
-apps/
-  server/      # Fastify API (tool gateway), Prisma/SQLite, receipt ledger
-  web/         # Next.js UI: timeline, approvals, receipt viewer
-  demo-agent/  # script that simulates an agent making tool calls
-packages/
-  core/        # policy engine, risk classifier, stable stringify, signing
-  connectors/  # mocked tool connectors (gmail/calendar) + persistence
-policies/      # YAML policies
-docs/          # architecture, receipts, policy, threat model
-```
-
----
-
-## Roadmap (near-term)
-
-* MCP gateway adapter
-* OpenTelemetry export (GenAI semantic conventions)
-* More verification modes (diff snapshots, provider webhooks)
-* Pluggable auth (JWT/OIDC) + multi-tenant support
-* Real connectors (Gmail/Google Calendar, Slack, GitHub) behind feature flags
+- MCP gateway adapter
+- OpenTelemetry export (GenAI semantic conventions)
+- Pluggable auth (JWT/OIDC) + multi-tenant support
+- Real connectors (Gmail, Calendar, Slack, GitHub)
+- More verification modes (diff snapshots, provider webhooks)
 
 ---
 
 ## Contributing
 
 PRs welcome. See [`CONTRIBUTING.md`](CONTRIBUTING.md).
-
----
 
 ## License
 

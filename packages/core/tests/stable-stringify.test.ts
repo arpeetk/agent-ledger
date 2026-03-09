@@ -31,8 +31,18 @@ describe('stableStringify', () => {
   });
 
   it('handles arrays of objects with different key orders', () => {
-    const a = { list: [{ z: 1, a: 2 }, { b: 3, a: 4 }] };
-    const b = { list: [{ a: 2, z: 1 }, { a: 4, b: 3 }] };
+    const a = {
+      list: [
+        { z: 1, a: 2 },
+        { b: 3, a: 4 },
+      ],
+    };
+    const b = {
+      list: [
+        { a: 2, z: 1 },
+        { a: 4, b: 3 },
+      ],
+    };
     expect(stableStringify(a)).toBe(stableStringify(b));
   });
 

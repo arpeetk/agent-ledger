@@ -49,6 +49,7 @@ export function loadKeyPair(publicKeyB64: string, secretKeyB64: string): KeyPair
  */
 export function signReceipt(receipt: ActionReceipt, keyPair: KeyPair): ActionReceipt {
   // Remove any existing signature before signing
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { signature: _, ...receiptWithoutSig } = receipt;
   const canonical = stableStringify(receiptWithoutSig);
   const messageBytes = decodeUTF8(canonical);

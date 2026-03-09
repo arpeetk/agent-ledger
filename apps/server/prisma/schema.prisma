@@ -29,6 +29,7 @@ model Receipt {
   intent           String?
   argsHash         String   // sha256 of stableStringify(args)
   redactedArgs     String   // JSON - safe metadata only
+  fieldsRedacted   String?  // JSON array of redacted field names
 
   // Policy
   policyId         String

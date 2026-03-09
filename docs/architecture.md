@@ -4,12 +4,12 @@ agent-ledger is a control plane that sits between an AI agent and the tools it c
 
 ## Components
 
-| Component | Path | Stack | Role |
-|---|---|---|---|
-| Server | `apps/server` | Fastify | Tool Gateway, PolicyEngine, receipt signing, ledger storage |
-| Web UI | `apps/web` | Next.js | Approval queue, receipt viewer, policy editor |
-| Core | `packages/core` | TypeScript | Shared types, policy evaluation logic, receipt schema |
-| Connectors | `packages/connectors` | TypeScript | Tool adapters (email, calendar, file system, etc.) |
+| Component  | Path                  | Stack      | Role                                                        |
+| ---------- | --------------------- | ---------- | ----------------------------------------------------------- |
+| Server     | `apps/server`         | Fastify    | Tool Gateway, PolicyEngine, receipt signing, ledger storage |
+| Web UI     | `apps/web`            | Next.js    | Approval queue, receipt viewer, policy editor               |
+| Core       | `packages/core`       | TypeScript | Shared types, policy evaluation logic, receipt schema       |
+| Connectors | `packages/connectors` | TypeScript | Tool adapters (email, calendar, file system, etc.)          |
 
 ## Control Plane Flow
 

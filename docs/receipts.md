@@ -38,25 +38,25 @@ Every tool call that passes through the gateway produces a signed receipt. Recei
 
 ### Field Reference
 
-| Field | Type | Description |
-|---|---|---|
-| `schema_version` | string | Always `"0.1"` for this version. |
-| `receipt_id` | string | Unique receipt identifier. |
-| `timestamp` | string | ISO 8601 timestamp of when the receipt was created. |
-| `agent_id` | string | Identifier of the agent that made the call. |
-| `tool` | string | Raw tool name as invoked by the agent. |
-| `capability` | string | Classified capability (e.g. `email:send`). |
-| `args_hash` | string | SHA-256 hash of the canonicalized call arguments. |
-| `decision` | string | Policy decision: `allow`, `deny`, or `require_approval`. |
-| `decision_reason` | string | Human-readable reason from the matched rule. |
-| `policy_id` | string | ID of the policy that was evaluated. |
-| `rule_id` | string | ID of the rule that matched, or `"default"` if none matched. |
-| `idempotency_key` | string | Key used to deduplicate retries. |
-| `execution` | object | Present only if the call was executed. Contains `status`, `duration_ms`, `retries`, `connector`, and optional `external_id`. |
-| `verification` | object | Present only for Tier-1 actions. Contains `type`, `passed`, and `checked_at`. |
-| `description` | string | Short human-readable summary of the action. May be redacted. |
-| `body_hash` | string | SHA-256 hash of the full request body. Used when the body is redacted. |
-| `signature` | string | Base64-encoded ed25519 signature over the canonicalized receipt. |
+| Field             | Type   | Description                                                                                                                  |
+| ----------------- | ------ | ---------------------------------------------------------------------------------------------------------------------------- |
+| `schema_version`  | string | Always `"0.1"` for this version.                                                                                             |
+| `receipt_id`      | string | Unique receipt identifier.                                                                                                   |
+| `timestamp`       | string | ISO 8601 timestamp of when the receipt was created.                                                                          |
+| `agent_id`        | string | Identifier of the agent that made the call.                                                                                  |
+| `tool`            | string | Raw tool name as invoked by the agent.                                                                                       |
+| `capability`      | string | Classified capability (e.g. `email:send`).                                                                                   |
+| `args_hash`       | string | SHA-256 hash of the canonicalized call arguments.                                                                            |
+| `decision`        | string | Policy decision: `allow`, `deny`, or `require_approval`.                                                                     |
+| `decision_reason` | string | Human-readable reason from the matched rule.                                                                                 |
+| `policy_id`       | string | ID of the policy that was evaluated.                                                                                         |
+| `rule_id`         | string | ID of the rule that matched, or `"default"` if none matched.                                                                 |
+| `idempotency_key` | string | Key used to deduplicate retries.                                                                                             |
+| `execution`       | object | Present only if the call was executed. Contains `status`, `duration_ms`, `retries`, `connector`, and optional `external_id`. |
+| `verification`    | object | Present only for Tier-1 actions. Contains `type`, `passed`, and `checked_at`.                                                |
+| `description`     | string | Short human-readable summary of the action. May be redacted.                                                                 |
+| `body_hash`       | string | SHA-256 hash of the full request body. Used when the body is redacted.                                                       |
+| `signature`       | string | Base64-encoded ed25519 signature over the canonicalized receipt.                                                             |
 
 ## Signing
 

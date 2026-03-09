@@ -1,0 +1,42 @@
+{
+  "name": "@agent-ledger/adapter-anthropic",
+  "version": "0.1.0",
+  "description": "Anthropic Claude adapter for Agent Ledger — policy-gated tool_use for Claude agents.",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch"
+  },
+  "dependencies": {
+    "@agent-ledger/sdk": "*"
+  },
+  "peerDependencies": {
+    "@anthropic-ai/sdk": ">=0.20.0"
+  },
+  "peerDependenciesMeta": {
+    "@anthropic-ai/sdk": {
+      "optional": false
+    }
+  },
+  "devDependencies": {
+    "@anthropic-ai/sdk": "^0.52.0",
+    "@types/node": "^25.2.3",
+    "typescript": "^5.4.0"
+  },
+  "license": "Apache-2.0",
+  "keywords": [
+    "agent-ledger",
+    "anthropic",
+    "claude",
+    "tool-use",
+    "policy"
+  ]
+}

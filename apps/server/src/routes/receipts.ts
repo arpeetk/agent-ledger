@@ -80,6 +80,73 @@ export async function receiptRoutes(app: FastifyInstance) {
     return { valid };
   });
 
+  // Aggregated stats
+  app.get('/stats', async () => {
+    const receipts = await prisma.receipt.findMany({
+      select: {
+        status: true,
+        capability: true,
+        riskLevel: true,
+        toolName: true,
+        agentId: true,
+        sessionId: true,
+        verificationStatus: true,
+        matchedRules: true,
+        latencyMs: true,
+        createdAt: true,
+      },
+    });
+
+    const byStatus: Record<string, number> = {};
+    const byCapability: Record<string, number> = {};
+    const byRisk: Record<string, number> = {};
+    const byTool: Record<string, number> = {};
+    const byAgent: Record<string, number> = {};
+    const policyHits: Record<string, number> = {};
+    const verification = { verified: 0, unverified: 0, failed: 0 };
+    let totalLatency = 0;
+    let latencyCount = 0;
+    const sessions = new Set<string>();
+
+    for (const r of receipts) {
+      byStatus[r.status] = (byStatus[r.status] ?? 0) + 1;
+      byCapability[r.capability] = (byCapability[r.capability] ?? 0) + 1;
+      byRisk[r.riskLevel] = (byRisk[r.riskLevel] ?? 0) + 1;
+      byTool[r.toolName] = (byTool[r.toolName] ?? 0) + 1;
+      byAgent[r.agentId] = (byAgent[r.agentId] ?? 0) + 1;
+      sessions.add(r.sessionId);
+
+      if (r.matchedRules) {
+        const rules = JSON.parse(r.matchedRules) as string[];
+        for (const rule of rules) {
+          policyHits[rule] = (policyHits[rule] ?? 0) + 1;
+        }
+      }
+
+      if (r.verificationStatus === 'verified') verification.verified++;
+      else if (r.verificationStatus === 'failed') verification.failed++;
+      else verification.unverified++;
+
+      if (r.latencyMs) {
+        totalLatency += r.latencyMs;
+        latencyCount++;
+      }
+    }
+
+    return {
+      total: receipts.length,
+      sessions: sessions.size,
+      avgLatencyMs: latencyCount > 0 ? Math.round(totalLatency / latencyCount) : null,
+      byStatus,
+      byCapability,
+      byRisk,
+      byTool,
+      byAgent,
+      policyHits,
+      verification,
+    };
+  });
+
   // Approve receipt
   app.post<{
     Params: { id: string };
@@ -88,7 +155,9 @@ export async function receiptRoutes(app: FastifyInstance) {
     const receipt = await prisma.receipt.findUnique({ where: { id: request.params.id } });
     if (!receipt) return reply.status(404).send({ error: 'Receipt not found' });
     if (receipt.status !== 'pending_approval') {
-      return reply.status(400).send({ error: `Receipt status is ${receipt.status}, not pending_approval` });
+      return reply
+        .status(400)
+        .send({ error: `Receipt status is ${receipt.status}, not pending_approval` });
     }
 
     const { approvedBy, comment } = request.body;
@@ -136,7 +205,9 @@ export async function receiptRoutes(app: FastifyInstance) {
     const receipt = await prisma.receipt.findUnique({ where: { id: request.params.id } });
     if (!receipt) return reply.status(404).send({ error: 'Receipt not found' });
     if (receipt.status !== 'pending_approval') {
-      return reply.status(400).send({ error: `Receipt status is ${receipt.status}, not pending_approval` });
+      return reply
+        .status(400)
+        .send({ error: `Receipt status is ${receipt.status}, not pending_approval` });
     }
 
     const { approvedBy, comment } = request.body;

@@ -36,7 +36,9 @@ export default function TimelinePage() {
               key={s}
               onClick={() => setFilter(s)}
               className={`px-3 py-1 rounded text-sm ${
-                filter === s ? 'bg-gray-900 text-white' : 'bg-white border border-gray-300 text-gray-700'
+                filter === s
+                  ? 'bg-gray-900 text-white'
+                  : 'bg-white border border-gray-300 text-gray-700'
               }`}
             >
               {s || 'All'}
@@ -49,7 +51,8 @@ export default function TimelinePage() {
         <p className="text-gray-500">Loading...</p>
       ) : receipts.length === 0 ? (
         <p className="text-gray-500">
-          No receipts yet. Run <code className="bg-gray-100 px-1 rounded">npm run demo</code> to generate some.
+          No receipts yet. Run <code className="bg-gray-100 px-1 rounded">npm run demo</code> to
+          generate some.
         </p>
       ) : (
         <div className="space-y-3">
