@@ -254,6 +254,38 @@ Add to your Claude Desktop config (`claude_desktop_config.json`):
 
 ---
 
+## Observability (OpenTelemetry)
+
+Add tracing to every tool call with one line. Works with Datadog, Honeycomb, Grafana, Jaeger, etc.
+
+```typescript
+import { AgentLedger } from '@agent-ledger/sdk';
+import { instrument } from '@agent-ledger/otel';
+
+const ledger = instrument(new AgentLedger({ session: { agentId: 'my-agent' } }));
+
+// Every tool call now emits OpenTelemetry spans with:
+// - agent_ledger.tool.name, agent_ledger.receipt.id
+// - agent_ledger.policy.decision, agent_ledger.capability
+// - agent_ledger.risk.level, agent_ledger.status
+const safe = ledger.wrap('gmail.send', sendEmail);
+await safe({ to: 'bob@co.com', subject: 'Hi' });
+```
+
+Options:
+
+```typescript
+import { instrument } from '@agent-ledger/otel';
+
+const ledger = instrument(rawLedger, {
+  tracer: myCustomTracer, // custom OTel tracer
+  recordArgs: true, // include tool args in spans (off by default for PII safety)
+  recordResults: true, // include tool results in spans
+});
+```
+
+---
+
 ## CLI
 
 ```bash
@@ -370,6 +402,7 @@ packages/
   adapter-anthropic/  Anthropic Claude tool_use adapter
   adapter-langchain/  LangChain adapter
   adapter-mcp/        MCP (Model Context Protocol) adapter
+  otel/               OpenTelemetry instrumentation
   cli/              CLI launcher (npx agent-ledger)
 policies/           YAML policy files
 docs/               Architecture, receipts, policy, threat model

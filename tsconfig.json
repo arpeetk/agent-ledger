@@ -8,6 +8,7 @@
     { "path": "packages/adapter-anthropic" },
     { "path": "packages/adapter-langchain" },
     { "path": "packages/adapter-mcp" },
+    { "path": "packages/otel" },
     { "path": "packages/cli" },
     { "path": "apps/server" },
     { "path": "apps/demo-agent" }

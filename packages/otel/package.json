@@ -1,0 +1,43 @@
+{
+  "name": "@agent-ledger/otel",
+  "version": "0.1.0",
+  "description": "OpenTelemetry instrumentation for Agent Ledger — trace tool calls, policy decisions, and approvals.",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch"
+  },
+  "dependencies": {
+    "@agent-ledger/sdk": "*"
+  },
+  "peerDependencies": {
+    "@opentelemetry/api": ">=1.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@opentelemetry/api": {
+      "optional": false
+    }
+  },
+  "devDependencies": {
+    "@opentelemetry/api": "^1.9.0",
+    "@types/node": "^25.2.3",
+    "typescript": "^5.4.0"
+  },
+  "license": "Apache-2.0",
+  "keywords": [
+    "agent-ledger",
+    "opentelemetry",
+    "otel",
+    "tracing",
+    "observability",
+    "ai-agents"
+  ]
+}
