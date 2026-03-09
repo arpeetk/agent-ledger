@@ -9,6 +9,7 @@ import { getKeyPair } from '../lib/keys.js';
 import { executeApprovedAction } from '../lib/executor.js';
 import { appendToLedger } from '../lib/ledger.js';
 import { emitWebhook } from '../lib/webhooks.js';
+import { emitEvent } from '../lib/events.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const LEDGER_PATH = join(__dirname, '../../receipts/ledger.jsonl');
@@ -191,19 +192,22 @@ export async function receiptRoutes(app: FastifyInstance) {
     });
     appendToLedger(signed);
 
+    const approveEventData = {
+      receiptId: receipt.id,
+      toolName: receipt.toolName,
+      capability: receipt.capability,
+      riskLevel: receipt.riskLevel,
+      sessionId: receipt.sessionId,
+      agentId: receipt.agentId,
+    };
     emitWebhook({
       event: 'receipt.approved',
       timestamp: new Date().toISOString(),
-      data: {
-        receiptId: receipt.id,
-        toolName: receipt.toolName,
-        capability: receipt.capability,
-        riskLevel: receipt.riskLevel,
-        policyDecision: receipt.policyDecision,
-        sessionId: receipt.sessionId,
-        agentId: receipt.agentId,
-        approvedBy,
-      },
+      data: { ...approveEventData, policyDecision: receipt.policyDecision, approvedBy },
+    });
+    emitEvent({
+      type: 'receipt.approved',
+      data: { ...approveEventData, status: 'executed' },
     });
 
     return {
@@ -255,19 +259,22 @@ export async function receiptRoutes(app: FastifyInstance) {
     });
     appendToLedger(signed);
 
+    const denyEventData = {
+      receiptId: receipt.id,
+      toolName: receipt.toolName,
+      capability: receipt.capability,
+      riskLevel: receipt.riskLevel,
+      sessionId: receipt.sessionId,
+      agentId: receipt.agentId,
+    };
     emitWebhook({
       event: 'receipt.approval_denied',
       timestamp: new Date().toISOString(),
-      data: {
-        receiptId: receipt.id,
-        toolName: receipt.toolName,
-        capability: receipt.capability,
-        riskLevel: receipt.riskLevel,
-        policyDecision: receipt.policyDecision,
-        sessionId: receipt.sessionId,
-        agentId: receipt.agentId,
-        approvedBy,
-      },
+      data: { ...denyEventData, policyDecision: receipt.policyDecision, approvedBy },
+    });
+    emitEvent({
+      type: 'receipt.approval_denied',
+      data: { ...denyEventData, status: 'denied' },
     });
 
     return { status: 'denied', receiptId: receipt.id };

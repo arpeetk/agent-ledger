@@ -13,6 +13,7 @@ const { default: Fastify } = await import('fastify');
 const { default: cors } = await import('@fastify/cors');
 const { toolRoutes } = await import('./routes/tools.js');
 const { receiptRoutes } = await import('./routes/receipts.js');
+const { eventRoutes } = await import('./routes/events.js');
 
 const app = Fastify({ logger: true });
 
@@ -20,6 +21,7 @@ await app.register(cors, { origin: true });
 
 await app.register(toolRoutes);
 await app.register(receiptRoutes);
+await app.register(eventRoutes);
 
 app.get('/health', async () => ({ status: 'ok' }));
 
