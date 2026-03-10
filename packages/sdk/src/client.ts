@@ -319,7 +319,15 @@ export class AgentLedger {
     } catch (err) {
       const latencyMs = Date.now() - start;
       const errorMsg = err instanceof Error ? err.message : String(err);
-      await this.report(evaluation.receiptId, { success: false, error: errorMsg, latencyMs });
+      // Best-effort report — don't mask the original tool error
+      await this.report(evaluation.receiptId, { success: false, error: errorMsg, latencyMs }).catch(
+        (reportErr) => {
+          console.error(
+            `[agent-ledger] Failed to report error for receipt ${evaluation.receiptId}:`,
+            reportErr,
+          );
+        },
+      );
       throw err;
     }
     const latencyMs = Date.now() - start;
@@ -329,7 +337,16 @@ export class AgentLedger {
       typeof result === 'object' && result !== null
         ? (result as Record<string, unknown>)
         : { value: result };
-    await this.report(evaluation.receiptId, { success: true, result: resultForReport, latencyMs });
+    await this.report(evaluation.receiptId, {
+      success: true,
+      result: resultForReport,
+      latencyMs,
+    }).catch((reportErr) => {
+      console.error(
+        `[agent-ledger] Failed to report success for receipt ${evaluation.receiptId}:`,
+        reportErr,
+      );
+    });
 
     this.config.onExecuted?.({ receiptId: evaluation.receiptId, toolName, result, latencyMs });
 
@@ -345,12 +362,15 @@ export class AgentLedger {
     };
   }
 
-  private async pollForResolution(receiptId: string): Promise<Receipt> {
+  private async pollForResolution(receiptId: string, signal?: AbortSignal): Promise<Receipt> {
     const timeout = this.config.approvalTimeoutMs ?? DEFAULT_APPROVAL_TIMEOUT_MS;
     const interval = this.config.approvalPollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS;
     const start = Date.now();
 
     while (Date.now() - start < timeout) {
+      if (signal?.aborted) {
+        throw new LedgerError(`Polling cancelled for receipt ${receiptId}`);
+      }
       await sleep(interval);
       const receipt = await this.getReceipt(receiptId);
       if (receipt.status !== 'pending_approval' && receipt.status !== 'awaiting_execution') {

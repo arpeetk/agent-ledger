@@ -132,11 +132,13 @@ describe('webhooks', () => {
     // Should not throw
     emitWebhook(payload);
 
-    await new Promise((r) => setTimeout(r, 50));
+    // Wait for retries (2 retries with exponential backoff: 1s + 2s)
+    await new Promise((r) => setTimeout(r, 4_000));
 
     expect(consoleSpy).toHaveBeenCalled();
+    expect(consoleSpy.mock.calls[0][0]).toMatch(/failed after/);
     consoleSpy.mockRestore();
-  });
+  }, 10_000);
 
   it('sends JSON body with correct content type', async () => {
     const payload: WebhookPayload = {

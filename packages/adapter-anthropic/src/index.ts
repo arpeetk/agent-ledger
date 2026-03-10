@@ -90,6 +90,17 @@ export function createToolProcessor(
   const onApproval = options?.onApproval ?? 'wait';
   const onDenied = options?.onDenied ?? 'message';
 
+  // Hoist wrap to registration time, not per-invocation
+  const wrappedFns = new Map<string, ReturnType<AgentLedger['wrap']>>();
+  for (const [name, config] of Object.entries(tools)) {
+    wrappedFns.set(
+      name,
+      ledger.wrap(name, config.handler, {
+        onApproval: onApproval === 'message' ? 'skip' : onApproval,
+      }),
+    );
+  }
+
   return {
     /** Get Anthropic tool definitions to pass to the API. */
     definitions(): AnthropicToolDefinition[] {
@@ -98,8 +109,8 @@ export function createToolProcessor(
 
     /** Process a tool_use block from Claude, returning a tool_result block. */
     async process(toolUse: ToolUseBlock): Promise<ToolResultBlock> {
-      const config = tools[toolUse.name];
-      if (!config) {
+      const wrappedFn = wrappedFns.get(toolUse.name);
+      if (!wrappedFn) {
         return {
           type: 'tool_result',
           tool_use_id: toolUse.id,
@@ -107,10 +118,6 @@ export function createToolProcessor(
           is_error: true,
         };
       }
-
-      const wrappedFn = ledger.wrap(toolUse.name, config.handler, {
-        onApproval: onApproval === 'message' ? 'skip' : onApproval,
-      });
 
       try {
         const result = await wrappedFn(toolUse.input);
@@ -129,11 +136,17 @@ export function createToolProcessor(
           };
         }
 
+        const content =
+          result.result === undefined
+            ? '{}'
+            : typeof result.result === 'string'
+              ? result.result
+              : JSON.stringify(result.result);
+
         return {
           type: 'tool_result',
           tool_use_id: toolUse.id,
-          content:
-            typeof result.result === 'string' ? result.result : JSON.stringify(result.result),
+          content,
         };
       } catch (err) {
         if (err instanceof LedgerDeniedError && onDenied === 'message') {
@@ -169,8 +182,21 @@ export function createToolProcessor(
       }
     },
 
-    /** Process all tool_use blocks from a Claude response. */
-    async processAll(toolUses: ToolUseBlock[]): Promise<ToolResultBlock[]> {
+    /**
+     * Process all tool_use blocks from a Claude response.
+     * By default runs in parallel. Set `sequential: true` for ordered execution.
+     */
+    async processAll(
+      toolUses: ToolUseBlock[],
+      opts?: { sequential?: boolean },
+    ): Promise<ToolResultBlock[]> {
+      if (opts?.sequential) {
+        const results: ToolResultBlock[] = [];
+        for (const tu of toolUses) {
+          results.push(await this.process(tu));
+        }
+        return results;
+      }
       return Promise.all(toolUses.map((tu) => this.process(tu)));
     },
   };

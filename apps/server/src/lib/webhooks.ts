@@ -107,7 +107,13 @@ export function emitWebhook(payload: WebhookPayload): void {
   }
 }
 
-async function deliverWebhook(config: WebhookConfig, payload: WebhookPayload): Promise<void> {
+const MAX_RETRIES = 2;
+
+async function deliverWebhook(
+  config: WebhookConfig,
+  payload: WebhookPayload,
+  attempt = 1,
+): Promise<void> {
   const body = JSON.stringify(payload);
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -134,8 +140,15 @@ async function deliverWebhook(config: WebhookConfig, payload: WebhookPayload): P
     });
 
     if (!res.ok) {
-      console.error(`[webhook] ${config.url} responded ${res.status}`);
+      throw new Error(`HTTP ${res.status}`);
     }
+  } catch (err) {
+    if (attempt <= MAX_RETRIES) {
+      const delay = Math.pow(2, attempt) * 500; // 1s, 2s
+      await new Promise((r) => setTimeout(r, delay));
+      return deliverWebhook(config, payload, attempt + 1);
+    }
+    console.error(`[webhook] ${config.url} failed after ${attempt} attempts: ${err}`);
   } finally {
     clearTimeout(timeout);
   }

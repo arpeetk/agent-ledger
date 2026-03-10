@@ -54,33 +54,51 @@ export async function executeToolCall(req: ToolExecuteRequest): Promise<{
   }
 
   // Create receipt record BEFORE execution
-  const receipt = await prisma.receipt.create({
-    data: {
-      status:
-        policy.decision === 'allow'
-          ? 'awaiting_execution'
-          : policy.decision === 'deny'
-            ? 'denied'
-            : 'pending_approval',
-      sessionId: req.session.sessionId,
-      agentId: req.session.agentId,
-      userId: req.session.userId,
-      environment: req.session.environment,
-      toolName: req.toolName,
-      capability,
-      riskLevel: risk.level,
-      riskReasons: JSON.stringify(risk.reasons),
-      intent: req.intent,
-      argsHash,
-      redactedArgs: JSON.stringify(redactedArgs),
-      fieldsRedacted: JSON.stringify(fieldsRedacted),
-      policyId: policy.policyId,
-      policyDecision: policy.decision,
-      matchedRules: JSON.stringify(policy.matchedRuleIds),
-      policyExplanation: policy.explanation,
-      idempotencyKey,
-    },
-  });
+  // Handle unique constraint race: if a concurrent request already created
+  // a receipt with the same idempotencyKey, find and return it.
+  let receipt;
+  try {
+    receipt = await prisma.receipt.create({
+      data: {
+        status:
+          policy.decision === 'allow'
+            ? 'awaiting_execution'
+            : policy.decision === 'deny'
+              ? 'denied'
+              : 'pending_approval',
+        sessionId: req.session.sessionId,
+        agentId: req.session.agentId,
+        userId: req.session.userId,
+        environment: req.session.environment,
+        toolName: req.toolName,
+        capability,
+        riskLevel: risk.level,
+        riskReasons: JSON.stringify(risk.reasons),
+        intent: req.intent,
+        argsHash,
+        redactedArgs: JSON.stringify(redactedArgs),
+        fieldsRedacted: JSON.stringify(fieldsRedacted),
+        policyId: policy.policyId,
+        policyDecision: policy.decision,
+        matchedRules: JSON.stringify(policy.matchedRuleIds),
+        policyExplanation: policy.explanation,
+        idempotencyKey,
+      },
+    });
+  } catch (err) {
+    // Unique constraint violation on idempotencyKey — concurrent request won the race
+    if (err instanceof Error && err.message.includes('Unique constraint')) {
+      const raced = await prisma.receipt.findFirst({ where: { idempotencyKey } });
+      if (raced) {
+        return {
+          status: raced.status as 'executed' | 'pending_approval' | 'denied',
+          receiptId: raced.id,
+          result: { replay: true, originalReceiptId: raced.id },
+        };
+      }
+    }
+    throw err;
+  }
 
   if (policy.decision === 'deny') {
     const actionReceipt = buildActionReceipt(
@@ -473,28 +491,47 @@ export async function evaluateToolCall(req: ToolExecuteRequest): Promise<{
         ? 'denied'
         : 'pending_approval';
 
-  const receipt = await prisma.receipt.create({
-    data: {
-      status,
-      sessionId: req.session.sessionId,
-      agentId: req.session.agentId,
-      userId: req.session.userId,
-      environment: req.session.environment,
-      toolName: req.toolName,
-      capability,
-      riskLevel: risk.level,
-      riskReasons: JSON.stringify(risk.reasons),
-      intent: req.intent,
-      argsHash,
-      redactedArgs: JSON.stringify(redactedArgs),
-      fieldsRedacted: JSON.stringify(fieldsRedacted),
-      policyId: policy.policyId,
-      policyDecision: policy.decision,
-      matchedRules: JSON.stringify(policy.matchedRuleIds),
-      policyExplanation: policy.explanation,
-      idempotencyKey,
-    },
-  });
+  let receipt;
+  try {
+    receipt = await prisma.receipt.create({
+      data: {
+        status,
+        sessionId: req.session.sessionId,
+        agentId: req.session.agentId,
+        userId: req.session.userId,
+        environment: req.session.environment,
+        toolName: req.toolName,
+        capability,
+        riskLevel: risk.level,
+        riskReasons: JSON.stringify(risk.reasons),
+        intent: req.intent,
+        argsHash,
+        redactedArgs: JSON.stringify(redactedArgs),
+        fieldsRedacted: JSON.stringify(fieldsRedacted),
+        policyId: policy.policyId,
+        policyDecision: policy.decision,
+        matchedRules: JSON.stringify(policy.matchedRuleIds),
+        policyExplanation: policy.explanation,
+        idempotencyKey,
+      },
+    });
+  } catch (err) {
+    if (err instanceof Error && err.message.includes('Unique constraint')) {
+      const raced = await prisma.receipt.findFirst({ where: { idempotencyKey } });
+      if (raced) {
+        return {
+          decision: policy.decision,
+          receiptId: raced.id,
+          policyExplanation: policy.explanation,
+          capability,
+          riskLevel: risk.level,
+          riskReasons: risk.reasons,
+          matchedRules: policy.matchedRuleIds,
+        };
+      }
+    }
+    throw err;
+  }
 
   // For deny, finalize and sign immediately
   if (policy.decision === 'deny') {

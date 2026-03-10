@@ -103,6 +103,7 @@ function createLedgerTool(
           });
         }
 
+        if (result.result === undefined) return '{}';
         return typeof result.result === 'string' ? result.result : JSON.stringify(result.result);
       } catch (err) {
         if (err instanceof LedgerDeniedError && onDenied === 'message') {

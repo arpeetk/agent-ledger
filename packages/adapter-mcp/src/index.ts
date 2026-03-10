@@ -86,7 +86,7 @@ export function createMcpServer(
   ledger: AgentLedger,
   tools: Record<string, LedgerMcpTool>,
   options?: CreateMcpServerOptions,
-): { server: McpServer; start: () => Promise<void> } {
+): { server: McpServer; start: () => Promise<void>; stop: () => Promise<void> } {
   const serverName = options?.name ?? 'agent-ledger';
   const serverVersion = options?.version ?? '0.1.0';
   const onDenied = options?.onDenied ?? 'error';
@@ -105,12 +105,21 @@ export function createMcpServer(
     });
   }
 
+  let transport: StdioServerTransport | null = null;
+
   async function start() {
-    const transport = new StdioServerTransport();
+    transport = new StdioServerTransport();
     await mcpServer.connect(transport);
   }
 
-  return { server: mcpServer, start };
+  async function stop() {
+    if (transport) {
+      await mcpServer.close();
+      transport = null;
+    }
+  }
+
+  return { server: mcpServer, start, stop };
 }
 
 function registerLedgerTool(
