@@ -1,4 +1,5 @@
-import { readFileSync, existsSync } from 'node:fs';
+import { createReadStream, existsSync } from 'node:fs';
+import { createInterface } from 'node:readline';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { FastifyInstance } from 'fastify';
@@ -19,7 +20,8 @@ export async function receiptRoutes(app: FastifyInstance) {
   app.get<{
     Querystring: { status?: string; limit?: string; cursor?: string };
   }>('/receipts', async (request) => {
-    const { status, limit = '50', cursor } = request.query;
+    const { status, limit: limitStr = '50', cursor } = request.query;
+    const limit = Math.min(Math.max(parseInt(limitStr, 10) || 50, 1), 200);
 
     const where: Record<string, unknown> = {};
     if (status) {
@@ -36,7 +38,7 @@ export async function receiptRoutes(app: FastifyInstance) {
     const receipts = await prisma.receipt.findMany({
       where,
       orderBy: { createdAt: 'desc' },
-      take: parseInt(limit, 10),
+      take: limit,
     });
 
     return {
@@ -60,13 +62,23 @@ export async function receiptRoutes(app: FastifyInstance) {
       return reply.status(404).send({ error: 'Ledger not found' });
     }
 
-    const lines = readFileSync(LEDGER_PATH, 'utf-8').split('\n').filter(Boolean);
+    // Stream the ledger file line by line to avoid loading entire file into memory
     let actionReceipt: ActionReceipt | null = null;
-    for (const line of lines) {
-      const parsed = JSON.parse(line) as ActionReceipt;
-      if (parsed.receipt_id === id) {
-        actionReceipt = parsed;
-        break;
+    const rl = createInterface({
+      input: createReadStream(LEDGER_PATH, 'utf-8'),
+      crlfDelay: Infinity,
+    });
+    for await (const line of rl) {
+      if (!line.trim()) continue;
+      try {
+        const parsed = JSON.parse(line) as ActionReceipt;
+        if (parsed.receipt_id === id) {
+          actionReceipt = parsed;
+          rl.close();
+          break;
+        }
+      } catch {
+        // Skip malformed lines
       }
     }
 
@@ -82,68 +94,77 @@ export async function receiptRoutes(app: FastifyInstance) {
     return { valid };
   });
 
-  // Aggregated stats
+  // Aggregated stats using SQL-level aggregation where possible
   app.get('/stats', async () => {
-    const receipts = await prisma.receipt.findMany({
-      select: {
-        status: true,
-        capability: true,
-        riskLevel: true,
-        toolName: true,
-        agentId: true,
-        sessionId: true,
-        verificationStatus: true,
-        matchedRules: true,
-        latencyMs: true,
-        createdAt: true,
-      },
-    });
+    // Use Prisma groupBy for simple aggregations to avoid loading all rows
+    const [
+      total,
+      sessionCount,
+      latencyAgg,
+      statusGroups,
+      capabilityGroups,
+      riskGroups,
+      toolGroups,
+      agentGroups,
+      verificationGroups,
+    ] = await Promise.all([
+      prisma.receipt.count(),
+      prisma.receipt.groupBy({ by: ['sessionId'] }).then((g) => g.length),
+      prisma.receipt.aggregate({
+        _avg: { latencyMs: true },
+        where: { latencyMs: { not: null } },
+      }),
+      prisma.receipt.groupBy({ by: ['status'], _count: true }),
+      prisma.receipt.groupBy({ by: ['capability'], _count: true }),
+      prisma.receipt.groupBy({ by: ['riskLevel'], _count: true }),
+      prisma.receipt.groupBy({ by: ['toolName'], _count: true }),
+      prisma.receipt.groupBy({ by: ['agentId'], _count: true }),
+      prisma.receipt.groupBy({ by: ['verificationStatus'], _count: true }),
+    ]);
 
-    const byStatus: Record<string, number> = {};
-    const byCapability: Record<string, number> = {};
-    const byRisk: Record<string, number> = {};
-    const byTool: Record<string, number> = {};
-    const byAgent: Record<string, number> = {};
-    const policyHits: Record<string, number> = {};
+    const toRecord = (groups: { _count: number; [key: string]: unknown }[], key: string) => {
+      const record: Record<string, number> = {};
+      for (const g of groups) {
+        const k = String(g[key] ?? 'unknown');
+        record[k] = g._count;
+      }
+      return record;
+    };
+
     const verification = { verified: 0, unverified: 0, failed: 0 };
-    let totalLatency = 0;
-    let latencyCount = 0;
-    const sessions = new Set<string>();
+    for (const g of verificationGroups) {
+      if (g.verificationStatus === 'verified') verification.verified = g._count;
+      else if (g.verificationStatus === 'failed') verification.failed = g._count;
+      else verification.unverified += g._count;
+    }
 
-    for (const r of receipts) {
-      byStatus[r.status] = (byStatus[r.status] ?? 0) + 1;
-      byCapability[r.capability] = (byCapability[r.capability] ?? 0) + 1;
-      byRisk[r.riskLevel] = (byRisk[r.riskLevel] ?? 0) + 1;
-      byTool[r.toolName] = (byTool[r.toolName] ?? 0) + 1;
-      byAgent[r.agentId] = (byAgent[r.agentId] ?? 0) + 1;
-      sessions.add(r.sessionId);
-
-      if (r.matchedRules) {
+    // Policy hits still requires scanning matchedRules JSON — use limited query
+    const policyHits: Record<string, number> = {};
+    const rulesRows = await prisma.receipt.findMany({
+      select: { matchedRules: true },
+      where: { matchedRules: { not: '[]' } },
+      take: 10_000,
+    });
+    for (const r of rulesRows) {
+      try {
         const rules = JSON.parse(r.matchedRules) as string[];
         for (const rule of rules) {
           policyHits[rule] = (policyHits[rule] ?? 0) + 1;
         }
-      }
-
-      if (r.verificationStatus === 'verified') verification.verified++;
-      else if (r.verificationStatus === 'failed') verification.failed++;
-      else verification.unverified++;
-
-      if (r.latencyMs) {
-        totalLatency += r.latencyMs;
-        latencyCount++;
+      } catch {
+        // Skip malformed matchedRules
       }
     }
 
     return {
-      total: receipts.length,
-      sessions: sessions.size,
-      avgLatencyMs: latencyCount > 0 ? Math.round(totalLatency / latencyCount) : null,
-      byStatus,
-      byCapability,
-      byRisk,
-      byTool,
-      byAgent,
+      total,
+      sessions: sessionCount,
+      avgLatencyMs: latencyAgg._avg.latencyMs ? Math.round(latencyAgg._avg.latencyMs) : null,
+      byStatus: toRecord(statusGroups, 'status'),
+      byCapability: toRecord(capabilityGroups, 'capability'),
+      byRisk: toRecord(riskGroups, 'riskLevel'),
+      byTool: toRecord(toolGroups, 'toolName'),
+      byAgent: toRecord(agentGroups, 'agentId'),
       policyHits,
       verification,
     };
@@ -154,24 +175,29 @@ export async function receiptRoutes(app: FastifyInstance) {
     Params: { id: string };
     Body: { approvedBy: string; comment?: string };
   }>('/receipts/:id/approve', async (request, reply) => {
-    const receipt = await prisma.receipt.findUnique({ where: { id: request.params.id } });
-    if (!receipt) return reply.status(404).send({ error: 'Receipt not found' });
-    if (receipt.status !== 'pending_approval') {
-      return reply
-        .status(400)
-        .send({ error: `Receipt status is ${receipt.status}, not pending_approval` });
-    }
-
     const { approvedBy, comment } = request.body;
 
-    await prisma.receipt.update({
-      where: { id: receipt.id },
+    // Atomic update with status guard to prevent TOCTOU double-approval
+    const { count } = await prisma.receipt.updateMany({
+      where: { id: request.params.id, status: 'pending_approval' },
       data: {
         approvalStatus: 'approved',
         approvedBy,
         approvalComment: comment,
         approvedAt: new Date(),
       },
+    });
+
+    if (count === 0) {
+      const receipt = await prisma.receipt.findUnique({ where: { id: request.params.id } });
+      if (!receipt) return reply.status(404).send({ error: 'Receipt not found' });
+      return reply
+        .status(400)
+        .send({ error: `Receipt status is ${receipt.status}, not pending_approval` });
+    }
+
+    const receipt = await prisma.receipt.findUniqueOrThrow({
+      where: { id: request.params.id },
     });
 
     // Execute the deferred action
@@ -222,18 +248,11 @@ export async function receiptRoutes(app: FastifyInstance) {
     Params: { id: string };
     Body: { approvedBy: string; comment?: string };
   }>('/receipts/:id/deny', async (request, reply) => {
-    const receipt = await prisma.receipt.findUnique({ where: { id: request.params.id } });
-    if (!receipt) return reply.status(404).send({ error: 'Receipt not found' });
-    if (receipt.status !== 'pending_approval') {
-      return reply
-        .status(400)
-        .send({ error: `Receipt status is ${receipt.status}, not pending_approval` });
-    }
-
     const { approvedBy, comment } = request.body;
 
-    await prisma.receipt.update({
-      where: { id: receipt.id },
+    // Atomic update with status guard to prevent TOCTOU double-deny
+    const { count } = await prisma.receipt.updateMany({
+      where: { id: request.params.id, status: 'pending_approval' },
       data: {
         status: 'denied',
         approvalStatus: 'denied',
@@ -245,8 +264,19 @@ export async function receiptRoutes(app: FastifyInstance) {
       },
     });
 
-    const updated = await prisma.receipt.findUniqueOrThrow({ where: { id: receipt.id } });
-    const actionReceipt = dbToActionReceipt(updated);
+    if (count === 0) {
+      const existing = await prisma.receipt.findUnique({ where: { id: request.params.id } });
+      if (!existing) return reply.status(404).send({ error: 'Receipt not found' });
+      return reply
+        .status(400)
+        .send({ error: `Receipt status is ${existing.status}, not pending_approval` });
+    }
+
+    const receipt = await prisma.receipt.findUniqueOrThrow({
+      where: { id: request.params.id },
+    });
+
+    const actionReceipt = dbToActionReceipt(receipt);
     const signed = signReceipt(actionReceipt, getKeyPair());
 
     await prisma.receipt.update({
@@ -361,7 +391,7 @@ function dbToActionReceipt(r: any): ActionReceipt {
           diff_summary: r.diffSummary ?? undefined,
         }
       : undefined,
-    redaction: { fields_redacted: [] },
+    redaction: { fields_redacted: r.fieldsRedacted ? JSON.parse(r.fieldsRedacted) : [] },
     signature: r.signatureB64
       ? {
           alg: r.signatureAlg ?? 'ed25519',

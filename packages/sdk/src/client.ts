@@ -114,7 +114,7 @@ export class AgentLedger {
 
   /** Fetch a receipt by ID. */
   async getReceipt(id: string): Promise<Receipt> {
-    return this.fetch(`/receipts/${id}`) as Promise<Receipt>;
+    return this.fetch(`/receipts/${encodeURIComponent(id)}`) as Promise<Receipt>;
   }
 
   /** List receipts with optional filters. */
@@ -136,7 +136,9 @@ export class AgentLedger {
 
   /** Verify a receipt's signature. */
   async verifyReceipt(id: string): Promise<{ valid: boolean }> {
-    return this.fetch(`/receipts/${id}/verify`) as Promise<{ valid: boolean }>;
+    return this.fetch(`/receipts/${encodeURIComponent(id)}/verify`) as Promise<{
+      valid: boolean;
+    }>;
   }
 
   /** Check server health. */
@@ -159,7 +161,7 @@ export class AgentLedger {
       latencyMs?: number;
     },
   ): Promise<{ receiptId: string; status: string }> {
-    return this.fetch(`/receipts/${receiptId}/report`, {
+    return this.fetch(`/receipts/${encodeURIComponent(receiptId)}/report`, {
       method: 'POST',
       body: report,
     }) as Promise<{ receiptId: string; status: string }>;
@@ -373,9 +375,15 @@ export class AgentLedger {
     options?: { method?: string; body?: unknown; allowedStatuses?: number[] },
   ): Promise<unknown> {
     const url = `${this.serverUrl}${path}`;
+    const method = options?.method ?? 'GET';
+    const headers: Record<string, string> = {};
+    if (options?.body) {
+      headers['Content-Type'] = 'application/json';
+    }
     const init: RequestInit = {
-      method: options?.method ?? 'GET',
-      headers: { 'Content-Type': 'application/json' },
+      method,
+      headers,
+      signal: AbortSignal.timeout(30_000),
     };
     if (options?.body) {
       init.body = JSON.stringify(options.body);
@@ -386,10 +394,14 @@ export class AgentLedger {
     const allowed = options?.allowedStatuses ?? [200];
     if (!res.ok && !allowed.includes(res.status)) {
       const text = await res.text().catch(() => '');
-      throw new LedgerError(`HTTP ${res.status} ${options?.method ?? 'GET'} ${path}: ${text}`);
+      throw new LedgerError(`HTTP ${res.status} ${method} ${path}: ${text}`);
     }
 
-    return res.json();
+    try {
+      return await res.json();
+    } catch {
+      throw new LedgerError(`Invalid JSON response from ${method} ${path}`);
+    }
   }
 }
 

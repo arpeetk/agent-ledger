@@ -134,6 +134,9 @@ function registerLedgerTool(
 
   const wrappedFn = ledger.wrap(toolName, toolDef.handler, wrapOptions);
 
+  // Note: McpServer.tool() accepts Zod shapes for parameters, not JSON Schema.
+  // If inputSchema.properties is provided, pass it as a Zod-compatible shape.
+  // For now, we pass the description and let the MCP client handle schema discovery.
   mcpServer.tool(toolName, toolDef.description, async (args: Record<string, unknown>) => {
     try {
       const result: LedgerResult = await wrappedFn(args);
@@ -207,9 +210,15 @@ function registerLedgerTool(
         };
       }
 
-      const message = err instanceof Error ? err.message : String(err);
+      // Don't leak internal error details to the LLM
+      console.error(`[mcp-adapter] Tool "${toolName}" error:`, err);
       return {
-        content: [{ type: 'text' as const, text: `Error: ${message}` }],
+        content: [
+          {
+            type: 'text' as const,
+            text: `Tool "${toolName}" encountered an internal error. Please try again or contact support.`,
+          },
+        ],
         isError: true,
       };
     }

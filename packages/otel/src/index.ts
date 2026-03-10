@@ -115,6 +115,15 @@ export function instrument(ledger: LedgerLike, options?: InstrumentOptions): Led
   return new InstrumentedLedger(ledger, tracer, recordArgs, recordResults);
 }
 
+/** Safely stringify values, handling circular references. */
+function safeStringify(value: unknown): string {
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return '[unserializable]';
+  }
+}
+
 class InstrumentedLedger implements LedgerLike {
   constructor(
     private inner: LedgerLike,
@@ -143,7 +152,7 @@ class InstrumentedLedger implements LedgerLike {
             [LedgerAttributes.TOOL_NAME]: toolName,
             [LedgerAttributes.SESSION_ID]: this.inner.getSessionId(),
             [LedgerAttributes.ON_APPROVAL]: options?.onApproval ?? 'wait',
-            ...(this.recordArgs ? { 'agent_ledger.args': JSON.stringify(args) } : {}),
+            ...(this.recordArgs ? { 'agent_ledger.args': safeStringify(args) } : {}),
           },
         },
         async (span) => {
@@ -160,7 +169,7 @@ class InstrumentedLedger implements LedgerLike {
                 ? { [LedgerAttributes.POLICY_EXPLANATION]: result.policyExplanation }
                 : {}),
               ...(this.recordResults && result.result
-                ? { 'agent_ledger.result': JSON.stringify(result.result) }
+                ? { 'agent_ledger.result': safeStringify(result.result) }
                 : {}),
             });
 
@@ -233,6 +242,7 @@ class InstrumentedLedger implements LedgerLike {
             code: SpanStatusCode.ERROR,
             message: err instanceof Error ? err.message : String(err),
           });
+          span.recordException(err instanceof Error ? err : new Error(String(err)));
           span.end();
           throw err;
         }
@@ -269,6 +279,7 @@ class InstrumentedLedger implements LedgerLike {
             code: SpanStatusCode.ERROR,
             message: err instanceof Error ? err.message : String(err),
           });
+          span.recordException(err instanceof Error ? err : new Error(String(err)));
           span.end();
           throw err;
         }
@@ -291,6 +302,7 @@ class InstrumentedLedger implements LedgerLike {
             code: SpanStatusCode.ERROR,
             message: err instanceof Error ? err.message : String(err),
           });
+          span.recordException(err instanceof Error ? err : new Error(String(err)));
           span.end();
           throw err;
         }
@@ -318,6 +330,7 @@ class InstrumentedLedger implements LedgerLike {
             code: SpanStatusCode.ERROR,
             message: err instanceof Error ? err.message : String(err),
           });
+          span.recordException(err instanceof Error ? err : new Error(String(err)));
           span.end();
           throw err;
         }
@@ -341,6 +354,7 @@ class InstrumentedLedger implements LedgerLike {
             code: SpanStatusCode.ERROR,
             message: err instanceof Error ? err.message : String(err),
           });
+          span.recordException(err instanceof Error ? err : new Error(String(err)));
           span.end();
           throw err;
         }
@@ -384,6 +398,7 @@ class InstrumentedLedger implements LedgerLike {
             code: SpanStatusCode.ERROR,
             message: err instanceof Error ? err.message : String(err),
           });
+          span.recordException(err instanceof Error ? err : new Error(String(err)));
           span.end();
           throw err;
         }

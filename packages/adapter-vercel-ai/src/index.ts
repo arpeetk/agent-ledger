@@ -67,23 +67,26 @@ export function withLedger<T extends ToolMap>(
   for (const [toolName, toolDef] of Object.entries(tools)) {
     const originalExecute = toolDef.execute;
 
+    if (!originalExecute) {
+      // No execute function — pass tool through unchanged
+      wrapped[toolName] = { ...toolDef };
+      continue;
+    }
+
+    const wrapOptions: WrapOptions = {
+      onApproval: onApproval === 'message' ? 'skip' : onApproval,
+    };
+
+    // Hoist wrap to registration time, not per-invocation
+    const wrappedFn = ledger.wrap(
+      toolName,
+      (a: Record<string, unknown>) => originalExecute(a),
+      wrapOptions,
+    );
+
     wrapped[toolName] = {
       ...toolDef,
       execute: async (args: Record<string, unknown>) => {
-        if (!originalExecute) {
-          throw new Error(`Tool "${toolName}" has no execute function`);
-        }
-
-        const wrapOptions: WrapOptions = {
-          onApproval: onApproval === 'message' ? 'skip' : onApproval,
-        };
-
-        const wrappedFn = ledger.wrap(
-          toolName,
-          (a: Record<string, unknown>) => originalExecute(a),
-          wrapOptions,
-        );
-
         try {
           const result = await wrappedFn(args);
 

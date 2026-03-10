@@ -31,7 +31,31 @@ interface WebhookConfig {
   events?: WebhookEventType[];
 }
 
+const VALID_EVENTS: Set<string> = new Set<string>([
+  'receipt.created',
+  'receipt.denied',
+  'receipt.pending_approval',
+  'receipt.executed',
+  'receipt.approved',
+  'receipt.approval_denied',
+]);
+
 let webhookConfigs: WebhookConfig[] = [];
+
+function parseEventFilter(eventsStr: string): WebhookEventType[] | undefined {
+  const events = eventsStr
+    .split(',')
+    .map((e) => e.trim())
+    .filter(Boolean);
+
+  const invalid = events.filter((e) => !VALID_EVENTS.has(e));
+  if (invalid.length > 0) {
+    console.warn(`[webhook] Ignoring invalid event types: ${invalid.join(', ')}`);
+  }
+
+  const valid = events.filter((e) => VALID_EVENTS.has(e)) as WebhookEventType[];
+  return valid.length > 0 ? valid : undefined;
+}
 
 /**
  * Load webhook configuration from environment.
@@ -53,9 +77,7 @@ export function loadWebhookConfig(): void {
 
     const secret = process.env[`WEBHOOK_SECRET_${i}`];
     const eventsStr = process.env[`WEBHOOK_EVENTS_${i}`];
-    const events = eventsStr
-      ? (eventsStr.split(',').map((e) => e.trim()) as WebhookEventType[])
-      : undefined;
+    const events = eventsStr ? parseEventFilter(eventsStr) : undefined;
 
     webhookConfigs.push({ url, secret, events });
   }
@@ -65,9 +87,7 @@ export function loadWebhookConfig(): void {
     webhookConfigs.push({
       url: process.env.WEBHOOK_URL,
       secret: process.env.WEBHOOK_SECRET,
-      events: process.env.WEBHOOK_EVENTS
-        ? (process.env.WEBHOOK_EVENTS.split(',').map((e) => e.trim()) as WebhookEventType[])
-        : undefined,
+      events: process.env.WEBHOOK_EVENTS ? parseEventFilter(process.env.WEBHOOK_EVENTS) : undefined,
     });
   }
 }
@@ -95,8 +115,11 @@ async function deliverWebhook(config: WebhookConfig, payload: WebhookPayload): P
   };
 
   if (config.secret) {
-    const signature = createHmac('sha256', config.secret).update(body).digest('hex');
-    headers['X-Ledger-Signature'] = `sha256=${signature}`;
+    // Include timestamp in signature for replay protection
+    const timestamp = Math.floor(Date.now() / 1000);
+    const signedPayload = `${timestamp}.${body}`;
+    const signature = createHmac('sha256', config.secret).update(signedPayload).digest('hex');
+    headers['X-Ledger-Signature'] = `t=${timestamp},v1=${signature}`;
   }
 
   const controller = new AbortController();

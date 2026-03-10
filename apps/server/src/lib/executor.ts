@@ -58,7 +58,7 @@ export async function executeToolCall(req: ToolExecuteRequest): Promise<{
     data: {
       status:
         policy.decision === 'allow'
-          ? 'executed'
+          ? 'awaiting_execution'
           : policy.decision === 'deny'
             ? 'denied'
             : 'pending_approval',
@@ -137,15 +137,32 @@ export async function executeToolCall(req: ToolExecuteRequest): Promise<{
   }
 
   // Execute immediately
-  const result = await executeWithRetries(req.toolName, req.args);
+  let result: ToolResult & { attempts: number; latencyMs: number };
+  try {
+    result = await executeWithRetries(req.toolName, req.args);
+  } catch (err) {
+    await prisma.receipt.update({
+      where: { id: receipt.id },
+      data: { status: 'failed', executionStatus: 'failed', finalizedAt: new Date() },
+    });
+    throw err;
+  }
 
   // Verification
-  const verification = await verifyExecution(req.toolName, result);
+  let verification: Awaited<ReturnType<typeof verifyExecution>>;
+  try {
+    verification = await verifyExecution(req.toolName, result);
+  } catch {
+    verification = { method: 'none', status: 'unverified' };
+  }
+
+  const finalStatus = result.success ? 'executed' : 'failed';
 
   // Update receipt
   await prisma.receipt.update({
     where: { id: receipt.id },
     data: {
+      status: finalStatus,
       executionStatus: result.success ? 'success' : 'failed',
       executionAttempts: result.attempts,
       resultHash: result.data ? hashValue(stableStringify(result.data)) : null,
@@ -201,13 +218,33 @@ export async function executeApprovedAction(receiptId: string): Promise<{
 
   // We need the original args to execute — but we only stored redacted args.
   // For the MVP, we store enough in redactedArgs to re-execute mock connectors.
-  const result = await executeWithRetries(receipt.toolName, redactedArgs);
-  const verification = await verifyExecution(receipt.toolName, result);
+  let result: ToolResult & { attempts: number; latencyMs: number };
+  try {
+    result = await executeWithRetries(receipt.toolName, redactedArgs);
+  } catch (err) {
+    await prisma.receipt.update({
+      where: { id: receiptId },
+      data: { status: 'failed', executionStatus: 'failed', finalizedAt: new Date() },
+    });
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
+
+  let verification: Awaited<ReturnType<typeof verifyExecution>>;
+  try {
+    verification = await verifyExecution(receipt.toolName, result);
+  } catch {
+    verification = { method: 'none', status: 'unverified' };
+  }
+
+  const finalStatus = result.success ? 'executed' : 'failed';
 
   await prisma.receipt.update({
     where: { id: receiptId },
     data: {
-      status: 'executed',
+      status: finalStatus,
       executionStatus: result.success ? 'success' : 'failed',
       executionAttempts: result.attempts,
       resultHash: result.data ? hashValue(stableStringify(result.data)) : null,
@@ -234,6 +271,7 @@ async function executeWithRetries(
   }
 
   let lastError: string | undefined;
+  const totalStart = Date.now();
   for (let attempt = 1; attempt <= maxRetries + 1; attempt++) {
     const start = Date.now();
     try {
@@ -248,7 +286,12 @@ async function executeWithRetries(
     }
   }
 
-  return { success: false, error: lastError, attempts: maxRetries + 1, latencyMs: 0 };
+  return {
+    success: false,
+    error: lastError,
+    attempts: maxRetries + 1,
+    latencyMs: Date.now() - totalStart,
+  };
 }
 
 async function verifyExecution(

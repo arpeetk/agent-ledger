@@ -60,27 +60,47 @@ export interface LedgerResult<T = unknown> {
   approvalStatus?: string;
 }
 
+/** Receipt status values. */
+export type ReceiptStatus =
+  | 'awaiting_execution'
+  | 'pending_approval'
+  | 'executed'
+  | 'denied'
+  | 'failed';
+
+/** Risk level values. */
+export type RiskLevel = 'low' | 'medium' | 'high';
+
+/** Approval status values. */
+export type ApprovalStatus = 'approved' | 'denied';
+
+/** Execution status values. */
+export type ExecutionStatus = 'success' | 'failed' | 'skipped';
+
+/** Verification status values. */
+export type VerificationStatus = 'verified' | 'unverified' | 'failed';
+
 /** A receipt as returned by the server API. */
 export interface Receipt {
   id: string;
-  status: string;
+  status: ReceiptStatus;
   createdAt: string;
   finalizedAt: string | null;
   toolName: string;
   capability: string;
-  riskLevel: string;
+  riskLevel: RiskLevel;
   riskReasons: string[];
   intent: string | null;
   redactedArgs: Record<string, unknown>;
-  policyDecision: string;
+  policyDecision: PolicyDecision;
   matchedRules: string[];
   policyExplanation: string | null;
-  approvalStatus: string | null;
+  approvalStatus: ApprovalStatus | null;
   approvedBy: string | null;
   approvalComment: string | null;
-  executionStatus: string | null;
+  executionStatus: ExecutionStatus | null;
   executionAttempts: number;
-  verificationStatus: string | null;
+  verificationStatus: VerificationStatus | null;
   diffSummary: string | null;
   signatureB64: string | null;
   sessionId: string;
@@ -129,10 +149,10 @@ export interface ExecuteResponse {
   error?: string;
 }
 
-/** A tool function that can be wrapped by the SDK. */
+/** A tool function that can be wrapped by the SDK. Accepts both sync and async functions. */
 export type ToolFn<TArgs = Record<string, unknown>, TResult = unknown> = (
   args: TArgs,
-) => Promise<TResult>;
+) => TResult | Promise<TResult>;
 
 /** A wrapped tool function with ledger metadata. */
 export interface WrappedTool<TArgs = Record<string, unknown>, TResult = unknown> {

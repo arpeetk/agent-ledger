@@ -7,6 +7,9 @@ export async function eventRoutes(app: FastifyInstance) {
    * Connect from the dashboard: new EventSource('/events')
    */
   app.get('/events', async (request, reply) => {
+    // Hijack the response so Fastify doesn't auto-close it
+    reply.hijack();
+
     reply.raw.writeHead(200, {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
@@ -32,8 +35,5 @@ export async function eventRoutes(app: FastifyInstance) {
       clearInterval(pingInterval);
       cleanup();
     });
-
-    // Don't end the response — it stays open for SSE
-    return reply;
   });
 }

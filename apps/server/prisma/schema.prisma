@@ -46,7 +46,7 @@ model Receipt {
   // Execution
   executionStatus  String?  // success | failed | skipped
   executionAttempts Int     @default(0)
-  idempotencyKey   String?
+  idempotencyKey   String?  @unique
   resultHash       String?
   latencyMs        Int?
 
@@ -64,7 +64,7 @@ model Receipt {
   // Indexes
   @@index([status])
   @@index([sessionId])
-  @@index([idempotencyKey])
+  @@index([createdAt, id])
   @@index([createdAt])
 }
 

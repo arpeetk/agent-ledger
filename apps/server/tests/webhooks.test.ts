@@ -101,7 +101,7 @@ describe('webhooks', () => {
       (c: unknown[]) => c[0] === 'https://hooks.example.com/test1',
     );
     expect(call1).toBeDefined();
-    expect(call1[1].headers['X-Ledger-Signature']).toMatch(/^sha256=/);
+    expect(call1[1].headers['X-Ledger-Signature']).toMatch(/^t=\d+,v1=[0-9a-f]+$/);
 
     // Endpoint 2 has no secret, so no signature
     const call2 = fetchSpy.mock.calls.find(
