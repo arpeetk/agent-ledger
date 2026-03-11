@@ -6,10 +6,13 @@
   "scripts": {
     "build": "tsc",
     "start": "tsx src/index.ts",
-    "start:sdk": "tsx src/sdk-demo.ts"
+    "start:sdk": "tsx src/sdk-demo.ts",
+    "start:claude": "tsx src/claude-agent.ts"
   },
   "dependencies": {
-    "@agent-ledger/sdk": "*"
+    "@agent-ledger/sdk": "*",
+    "@agent-ledger/adapter-anthropic": "*",
+    "@anthropic-ai/sdk": "^0.78.0"
   },
   "devDependencies": {
     "@types/node": "^25.2.3",
