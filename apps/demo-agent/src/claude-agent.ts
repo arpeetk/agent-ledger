@@ -13,7 +13,6 @@
  */
 import Anthropic from '@anthropic-ai/sdk';
 import { AgentLedger } from '@agent-ledger/sdk';
-import { createToolProcessor } from '@agent-ledger/adapter-anthropic';
 
 // ── Setup ──
 
@@ -27,113 +26,131 @@ const ledger = new AgentLedger({
     userId: 'demo-user',
     environment: 'development',
   },
-  onPendingApproval: (event) => {
-    console.log(`\n⏳ Awaiting approval for "${event.toolName}"`);
-    console.log(`   Risk: ${event.riskLevel} | Receipt: ${event.receiptId}`);
-    console.log(`   Reason: ${event.policyExplanation}`);
-    console.log(`   Approve at: http://localhost:3000/approvals\n`);
-  },
-  onDenied: (event) => {
-    console.log(`\n🚫 Denied: "${event.toolName}" — ${event.policyExplanation}\n`);
-  },
-  onExecuted: (event) => {
-    console.log(
-      `\n✅ Executed "${event.toolName}" in ${event.latencyMs}ms (receipt: ${event.receiptId})\n`,
-    );
-  },
 });
 
-// ── Tool Definitions ──
+// ── Tool name mapping ──
+// Claude API requires tool names matching ^[a-zA-Z0-9_-]+
+// Agent Ledger server uses dot-notation (gmail.send, calendar.create_event)
+const TOOL_NAME_MAP: Record<string, string> = {
+  gmail_send: 'gmail.send',
+  gmail_create_draft: 'gmail.create_draft',
+  calendar_create_event: 'calendar.create_event',
+  social_post: 'social.post',
+};
 
-const processor = createToolProcessor(
-  ledger,
+// ── Tool Definitions (sent to Claude) ──
+
+const tools: Anthropic.Messages.Tool[] = [
   {
-    gmail_send: {
-      definition: {
-        name: 'gmail.send',
-        description:
-          'Send an email. Use this to send emails to recipients. ' +
-          'Internal emails to @mycompany.com are auto-allowed. ' +
-          'External emails require human approval.',
-        input_schema: {
-          type: 'object',
-          properties: {
-            to: {
-              type: 'array',
-              items: { type: 'string' },
-              description: 'List of recipient email addresses',
-            },
-            subject: { type: 'string', description: 'Email subject line' },
-            body: { type: 'string', description: 'Email body content' },
-          },
-          required: ['to', 'subject', 'body'],
-        },
+    name: 'gmail_send',
+    description:
+      'Send an email. Internal emails to @mycompany.com are auto-allowed. ' +
+      'External emails require human approval.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        to: { type: 'array', items: { type: 'string' }, description: 'Recipient email addresses' },
+        subject: { type: 'string', description: 'Email subject line' },
+        body: { type: 'string', description: 'Email body content' },
       },
-      handler: async (args) => args, // Server-side execution via gateway mode
-    },
-    gmail_create_draft: {
-      definition: {
-        name: 'gmail.create_draft',
-        description:
-          'Create an email draft without sending. ' +
-          'Useful for composing emails that need review before sending.',
-        input_schema: {
-          type: 'object',
-          properties: {
-            to: {
-              type: 'array',
-              items: { type: 'string' },
-              description: 'List of recipient email addresses',
-            },
-            subject: { type: 'string', description: 'Email subject line' },
-            body: { type: 'string', description: 'Draft body content' },
-          },
-          required: ['to', 'subject', 'body'],
-        },
-      },
-      handler: async (args) => args,
-    },
-    calendar_create_event: {
-      definition: {
-        name: 'calendar.create_event',
-        description:
-          'Create a calendar event. Events with more than 10 attendees require approval.',
-        input_schema: {
-          type: 'object',
-          properties: {
-            title: { type: 'string', description: 'Event title' },
-            startTime: { type: 'string', description: 'ISO 8601 start time' },
-            endTime: { type: 'string', description: 'ISO 8601 end time' },
-            attendees: {
-              type: 'array',
-              items: { type: 'string' },
-              description: 'List of attendee email addresses',
-            },
-            description: { type: 'string', description: 'Event description' },
-          },
-          required: ['title', 'startTime', 'endTime', 'attendees'],
-        },
-      },
-      handler: async (args) => args,
-    },
-    social_post: {
-      definition: {
-        name: 'social.post',
-        description: 'Post content to social media. This action is always denied by policy.',
-        input_schema: {
-          type: 'object',
-          properties: {
-            content: { type: 'string', description: 'Post content' },
-            platform: { type: 'string', description: 'Target platform (twitter, linkedin, etc.)' },
-          },
-          required: ['content', 'platform'],
-        },
-      },
-      handler: async (args) => args,
+      required: ['to', 'subject', 'body'],
     },
   },
-  { onApproval: 'message', onDenied: 'message' },
-);
+  {
+    name: 'gmail_create_draft',
+    description: 'Create an email draft without sending. Useful for emails that need review.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        to: { type: 'array', items: { type: 'string' }, description: 'Recipient email addresses' },
+        subject: { type: 'string', description: 'Email subject line' },
+        body: { type: 'string', description: 'Draft body content' },
+      },
+      required: ['to', 'subject', 'body'],
+    },
+  },
+  {
+    name: 'calendar_create_event',
+    description: 'Create a calendar event. Events with more than 10 attendees require approval.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        title: { type: 'string', description: 'Event title' },
+        startTime: { type: 'string', description: 'ISO 8601 start time' },
+        endTime: { type: 'string', description: 'ISO 8601 end time' },
+        attendees: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Attendee email addresses',
+        },
+        description: { type: 'string', description: 'Event description' },
+      },
+      required: ['title', 'startTime', 'endTime', 'attendees'],
+    },
+  },
+  {
+    name: 'social_post',
+    description: 'Post content to social media. This action is always denied by policy.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        content: { type: 'string', description: 'Post content' },
+        platform: { type: 'string', description: 'Target platform (twitter, linkedin, etc.)' },
+      },
+      required: ['content', 'platform'],
+    },
+  },
+];
+
+// ── Execute a tool call through Agent Ledger ──
+
+async function executeTool(
+  claudeName: string,
+  args: Record<string, unknown>,
+): Promise<{ content: string; is_error?: boolean }> {
+  const serverName = TOOL_NAME_MAP[claudeName] ?? claudeName;
+
+  try {
+    const result = await ledger.execute(serverName, args, { onApproval: 'skip' });
+
+    if (result.status === 'pending_approval') {
+      console.log(`\n  ⏳ "${serverName}" requires approval`);
+      console.log(`     Receipt: ${result.receiptId}`);
+      console.log(`     Approve at: http://localhost:3000/approvals\n`);
+      return {
+        content: JSON.stringify({
+          status: 'pending_approval',
+          receiptId: result.receiptId,
+          message: 'This action requires human approval before execution.',
+        }),
+      };
+    }
+
+    if (result.status === 'denied') {
+      console.log(`\n  🚫 "${serverName}" denied: ${result.error}\n`);
+      return {
+        content: JSON.stringify({
+          status: 'denied',
+          message: `Denied by policy: ${result.error}`,
+        }),
+      };
+    }
+
+    console.log(`\n  ✅ "${serverName}" executed (receipt: ${result.receiptId})\n`);
+    return {
+      content: result.result === undefined ? '{}' : JSON.stringify(result.result),
+    };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    // Extract useful info from ledger errors
+    if (message.includes('denied')) {
+      console.log(`\n  🚫 "${serverName}" denied\n`);
+      return { content: JSON.stringify({ status: 'denied', message }) };
+    }
+    console.log(`\n  ❌ "${serverName}" error: ${message}\n`);
+    return { content: message, is_error: true };
+  }
+}
 
 // ── Agent Loop ──
 
@@ -175,7 +192,7 @@ async function runAgent() {
     const response = await anthropic.messages.create({
       model: 'claude-sonnet-4-20250514',
       max_tokens: 2048,
-      tools: processor.definitions() as Anthropic.Messages.Tool[],
+      tools,
       messages,
     });
 
@@ -194,26 +211,20 @@ async function runAgent() {
     if (toolUseBlocks.length > 0) {
       console.log(`\n[Calling ${toolUseBlocks.length} tool(s)...]`);
 
-      // Cast to adapter's ToolUseBlock type (Anthropic SDK uses `unknown` for input)
-      const adapterBlocks = toolUseBlocks.map((b) => ({
-        type: 'tool_use' as const,
-        id: b.id,
-        name: b.name,
-        input: b.input as Record<string, unknown>,
-      }));
-      const toolResults = await processor.processAll(adapterBlocks, { sequential: true });
+      const toolResults: Anthropic.Messages.ToolResultBlockParam[] = [];
+      for (const block of toolUseBlocks) {
+        const result = await executeTool(block.name, block.input as Record<string, unknown>);
+        toolResults.push({
+          type: 'tool_result',
+          tool_use_id: block.id,
+          content: result.content,
+          ...(result.is_error ? { is_error: true } : {}),
+        });
+      }
 
       // Add assistant response and tool results to messages
       messages.push({ role: 'assistant', content: response.content });
-      messages.push({
-        role: 'user',
-        content: toolResults.map((tr) => ({
-          type: 'tool_result' as const,
-          tool_use_id: tr.tool_use_id,
-          content: tr.content,
-          ...(tr.is_error ? { is_error: true } : {}),
-        })),
-      });
+      messages.push({ role: 'user', content: toolResults });
     }
 
     if (response.stop_reason === 'end_turn') {

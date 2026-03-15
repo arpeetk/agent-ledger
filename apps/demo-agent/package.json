@@ -11,7 +11,6 @@
   },
   "dependencies": {
     "@agent-ledger/sdk": "*",
-    "@agent-ledger/adapter-anthropic": "*",
     "@anthropic-ai/sdk": "^0.78.0"
   },
   "devDependencies": {
