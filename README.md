@@ -38,26 +38,6 @@ These are not hypothetical concerns. The **EU AI Act** requires audit trails for
 
 ---
 
-## How It's Different
-
-Agent Ledger occupies a unique position in the AI safety tooling landscape. Existing solutions focus on prompt filtering or output guardrails — none combine policy enforcement, approval workflows, and signed receipts into a single control plane.
-
-| Feature                                                   | Galileo AI Control | LlamaFirewall | NeMo Guardrails     | **Agent Ledger**               |
-| --------------------------------------------------------- | ------------------ | ------------- | ------------------- | ------------------------------ |
-| Signed, tamper-evident receipts                           | No                 | No            | No                  | **Yes (ed25519)**              |
-| Approval UI / human-in-the-loop                           | No                 | No            | No                  | **Yes (full dashboard)**       |
-| Read-after-write verification                             | No                 | No            | No                  | **Yes**                        |
-| Redaction policy (compliance-safe)                        | No                 | No            | No                  | **Yes**                        |
-| Idempotent execution + retries                            | No                 | No            | No                  | **Yes**                        |
-| YAML policy engine                                        | No                 | No            | Colang (custom DSL) | **Yes (YAML)**                 |
-| Framework adapters (Vercel AI, LangChain, Anthropic, MCP) | Partial            | No            | LangChain only      | **Yes (all major frameworks)** |
-| Prompt/output filtering                                   | Yes                | Yes           | Yes                 | Not in scope (complementary)   |
-| Open source                                               | No                 | Yes           | Yes                 | **Yes (Apache-2.0)**           |
-
-Agent Ledger is **complementary** to guardrails libraries. Use NeMo Guardrails or LlamaFirewall for prompt safety. Use Agent Ledger for everything that happens _after_ the model decides to call a tool.
-
----
-
 ## Quickstart
 
 ### 1. Install & setup
