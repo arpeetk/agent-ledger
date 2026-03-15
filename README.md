@@ -37,9 +37,93 @@ Server: http://localhost:3001 · Dashboard: http://localhost:3000
 ### 2. Run the demo
 
 ```bash
-npm run demo        # Gateway mode (server executes tools)
-npm run demo:sdk    # SDK mode (local execution, policy via server)
+npm run demo                              # Gateway mode (server executes tools)
+npm run demo:sdk                          # SDK mode (local execution, policy via server)
+ANTHROPIC_API_KEY=sk-... npm run demo:claude  # Claude AI agent demo (requires API key)
 ```
+
+---
+
+## Demo: Claude AI Agent with Policy-Gated Tools
+
+A real Claude agent making tool calls, with every call gated by Agent Ledger policies in real time.
+
+```bash
+# Terminal 1: Start server + dashboard
+npm run dev
+
+# Terminal 2: Run the Claude agent
+ANTHROPIC_API_KEY=sk-... npm run demo:claude
+```
+
+### What happens
+
+Claude is given 4 tasks. Agent Ledger evaluates each tool call against policy:
+
+```
+╔══════════════════════════════════════════════════════╗
+║     Agent Ledger + Claude API Demo                  ║
+║     Policy-gated tool execution in action           ║
+╚══════════════════════════════════════════════════════╝
+
+Agent Ledger server: connected
+Session: d312ed09-e842-4b7b-859d-6ada8851fd48
+
+--- Claude is thinking... ---
+
+Claude: I'll execute these actions in order:
+
+Action 1: Internal email to alice@mycompany.com
+
+[Calling 1 tool(s)...]
+  ✅ "gmail.send" executed (receipt: cmms50mkh0004o5oezi6tqljn)
+
+Claude: ✅ Email sent successfully (internal email auto-approved)
+
+Action 2: Draft email for external partnership
+
+[Calling 1 tool(s)...]
+  ⏳ "gmail.create_draft" requires approval
+     Receipt: cmms50pdr0007o5oe3p6inmrx
+     Approve at: http://localhost:3000/approvals
+
+Claude: ⚠️ Draft created, pending human approval (external email policy)
+
+Action 3: All-hands meeting with 12 attendees
+
+[Calling 1 tool(s)...]
+  ⏳ "calendar.create_event" requires approval
+     Receipt: cmms50t740008o5oeq10rcdas
+     Approve at: http://localhost:3000/approvals
+
+Claude: ⚠️ Meeting creation pending approval (>10 attendees requires approval)
+
+Action 4: Twitter post
+
+[Calling 1 tool(s)...]
+  🚫 "social.post" denied: Public posting is not allowed.
+
+Claude: ❌ Social media post denied by policy
+
+--- Demo complete ---
+
+Receipts from this session:
+  🚫 social.post → denied
+  ⏳ calendar.create_event → pending_approval
+  ⏳ gmail.create_draft → pending_approval
+  ✅ gmail.send → executed
+```
+
+### Policy decisions in action
+
+| Action            | Tool                    | Risk   | Policy Decision                            |
+| ----------------- | ----------------------- | ------ | ------------------------------------------ |
+| Internal email    | `gmail.send`            | Low    | **Auto-allowed** (internal domain)         |
+| External draft    | `gmail.create_draft`    | Medium | **Requires approval** (external recipient) |
+| 12-person meeting | `calendar.create_event` | Medium | **Requires approval** (>10 attendees)      |
+| Social media post | `social.post`           | High   | **Denied** (public posting blocked)        |
+
+Pending approvals appear in the dashboard at http://localhost:3000/approvals where a human can approve or deny them. Every action — allowed, denied, or approved — produces a **signed, tamper-evident receipt**.
 
 ---
 
@@ -440,11 +524,11 @@ See [`docs/threat-model.md`](docs/threat-model.md).
 
 ## Roadmap
 
-- MCP gateway adapter
-- OpenTelemetry export (GenAI semantic conventions)
 - Pluggable auth (JWT/OIDC) + multi-tenant support
 - Real connectors (Gmail, Calendar, Slack, GitHub)
 - More verification modes (diff snapshots, provider webhooks)
+- Policy versioning and rollback
+- Receipt export (CSV, Parquet) for compliance reporting
 
 ---
 
