@@ -7,7 +7,8 @@ export type Capability =
   | 'FILE_SHARE'
   | 'DELETE'
   | 'PUBLIC_POST'
-  | 'PAYMENTS';
+  | 'PAYMENTS'
+  | 'UNKNOWN';
 
 // ── Risk ──
 export type RiskLevel = 'low' | 'medium' | 'high';
@@ -17,7 +18,8 @@ export type RiskReason =
   | 'contains_link'
   | 'many_recipients'
   | 'delete_action'
-  | 'public_post';
+  | 'public_post'
+  | 'unknown_tool';
 
 export interface RiskAssessment {
   level: RiskLevel;
@@ -32,6 +34,7 @@ export interface PolicyResult {
   matchedRuleIds: string[];
   explanation: string;
   policyId: string;
+  warnings?: string[];
 }
 
 export interface PolicyRule {
@@ -39,6 +42,7 @@ export interface PolicyRule {
   when: {
     capability?: Capability[];
     tool?: string[];
+    risk_level?: RiskLevel[];
     any?: ArgPredicate[];
     all?: ArgPredicate[];
   };
@@ -52,6 +56,7 @@ export interface ArgPredicate {
   arg: {
     path: string;
     matches?: string;
+    not_matches?: string;
     gt?: number;
     lt?: number;
     max_len?: number;

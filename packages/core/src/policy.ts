@@ -6,13 +6,22 @@ import type {
   PolicyFile,
   PolicyResult,
   PolicyRule,
+  RiskLevel,
 } from './types.js';
+
+export class PolicyValidationError extends Error {
+  constructor(public readonly issues: string[]) {
+    super(`Policy validation failed:\n${issues.map((i) => `  - ${i}`).join('\n')}`);
+    this.name = 'PolicyValidationError';
+  }
+}
 
 export class PolicyEngine {
   private policy: PolicyFile;
 
   constructor(yamlContent: string) {
     this.policy = yaml.load(yamlContent) as PolicyFile;
+    this.validate();
   }
 
   get policyId(): string {
@@ -23,24 +32,44 @@ export class PolicyEngine {
     return this.policy.params?.org_domains ?? [];
   }
 
-  evaluate(capability: Capability, toolName: string, args: Record<string, unknown>): PolicyResult {
-    const matchedRules: string[] = [];
+  evaluate(
+    capability: Capability,
+    toolName: string,
+    args: Record<string, unknown>,
+    riskLevel?: RiskLevel,
+  ): PolicyResult {
+    const matchedRules: { id: string; decision: PolicyDecision }[] = [];
     let decision: PolicyDecision = this.policy.defaults.decision;
     let explanation = `Default policy: ${decision}`;
 
     for (const rule of this.policy.rules) {
-      if (this.ruleMatches(rule, capability, toolName, args)) {
-        matchedRules.push(rule.id);
+      if (this.ruleMatches(rule, capability, toolName, args, riskLevel)) {
+        matchedRules.push({ id: rule.id, decision: rule.then.decision });
         decision = rule.then.decision;
         explanation = rule.then.reason ?? `Matched rule: ${rule.id}`;
       }
     }
 
+    const matchedRuleIds = matchedRules.map((r) => r.id);
+
+    // Detect conflicting rule matches
+    const warnings: string[] = [];
+    if (matchedRules.length > 1) {
+      const decisions = new Set(matchedRules.map((r) => r.decision));
+      if (decisions.size > 1) {
+        const conflicts = matchedRules.map((r) => `${r.id}(${r.decision})`).join(', ');
+        warnings.push(
+          `Conflicting rules matched: ${conflicts}. Last rule "${matchedRules[matchedRules.length - 1].id}" wins with decision "${decision}".`,
+        );
+      }
+    }
+
     return {
       decision,
-      matchedRuleIds: matchedRules,
+      matchedRuleIds,
       explanation,
       policyId: this.policy.policy_id,
+      ...(warnings.length > 0 ? { warnings } : {}),
     };
   }
 
@@ -49,6 +78,7 @@ export class PolicyEngine {
     capability: Capability,
     toolName: string,
     args: Record<string, unknown>,
+    riskLevel?: RiskLevel,
   ): boolean {
     const when = rule.when;
 
@@ -60,6 +90,13 @@ export class PolicyEngine {
     // Check tool match
     if (when.tool && !when.tool.includes(toolName)) {
       return false;
+    }
+
+    // Check risk_level match
+    if (when.risk_level) {
+      if (!riskLevel || !when.risk_level.includes(riskLevel)) {
+        return false;
+      }
     }
 
     // Check "all" predicates (all must match)
@@ -78,7 +115,7 @@ export class PolicyEngine {
   }
 
   private evaluatePredicate(pred: ArgPredicate, args: Record<string, unknown>): boolean {
-    const { path, matches, gt, lt, max_len } = pred.arg;
+    const { path, matches, not_matches, gt, lt, max_len } = pred.arg;
 
     const values = this.resolvePath(path, args);
 
@@ -90,12 +127,25 @@ export class PolicyEngine {
         // Invalid regex pattern in policy — treat as non-matching
         return false;
       }
-      // Guard against catastrophic backtracking by timing out regex evaluation
       return values.some((v) => {
         if (typeof v !== 'string') return false;
-        // Limit input length to prevent ReDoS
         if (v.length > 10_000) return false;
         return regex.test(v);
+      });
+    }
+
+    if (not_matches !== undefined) {
+      let regex: RegExp;
+      try {
+        regex = new RegExp(not_matches);
+      } catch {
+        return false;
+      }
+      // True if any value does NOT match the pattern
+      return values.some((v) => {
+        if (typeof v !== 'string') return false;
+        if (v.length > 10_000) return false;
+        return !regex.test(v);
       });
     }
 
@@ -153,5 +203,69 @@ export class PolicyEngine {
       current = (current as Record<string, unknown>)[part];
     }
     return current;
+  }
+
+  private validate(): void {
+    const issues: string[] = [];
+
+    if (!this.policy.policy_id || typeof this.policy.policy_id !== 'string') {
+      issues.push('Missing or invalid "policy_id"');
+    }
+
+    if (!this.policy.defaults?.decision) {
+      issues.push('Missing "defaults.decision"');
+    } else if (!['allow', 'deny', 'require_approval'].includes(this.policy.defaults.decision)) {
+      issues.push(`Invalid defaults.decision: "${this.policy.defaults.decision}"`);
+    }
+
+    if (!Array.isArray(this.policy.rules)) {
+      issues.push('Missing or invalid "rules" array');
+    } else {
+      const seenIds = new Set<string>();
+
+      for (let i = 0; i < this.policy.rules.length; i++) {
+        const rule = this.policy.rules[i];
+        const prefix = `rules[${i}]`;
+
+        if (!rule.id || typeof rule.id !== 'string') {
+          issues.push(`${prefix}: missing or invalid "id"`);
+        } else {
+          if (seenIds.has(rule.id)) {
+            issues.push(`${prefix}: duplicate rule id "${rule.id}"`);
+          }
+          seenIds.add(rule.id);
+        }
+
+        if (
+          !rule.then?.decision ||
+          !['allow', 'deny', 'require_approval'].includes(rule.then.decision)
+        ) {
+          issues.push(`${prefix}: missing or invalid "then.decision"`);
+        }
+
+        // Validate regex patterns in predicates
+        const predicates = [...(rule.when?.all ?? []), ...(rule.when?.any ?? [])];
+        for (const pred of predicates) {
+          if (pred.arg?.matches) {
+            try {
+              new RegExp(pred.arg.matches);
+            } catch {
+              issues.push(`${prefix}: invalid regex in "matches": ${pred.arg.matches}`);
+            }
+          }
+          if (pred.arg?.not_matches) {
+            try {
+              new RegExp(pred.arg.not_matches);
+            } catch {
+              issues.push(`${prefix}: invalid regex in "not_matches": ${pred.arg.not_matches}`);
+            }
+          }
+        }
+      }
+    }
+
+    if (issues.length > 0) {
+      throw new PolicyValidationError(issues);
+    }
   }
 }

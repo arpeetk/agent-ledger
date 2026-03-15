@@ -7,6 +7,13 @@ params:
   org_domains: ['mycompany.com']
 
 rules:
+  - id: deny_unknown_tools
+    when:
+      capability: ['UNKNOWN']
+    then:
+      decision: deny
+      reason: 'Unknown tools are denied by default.'
+
   - id: allow_reads
     when:
       capability: ['READ_ONLY']
@@ -31,7 +38,7 @@ rules:
       any:
         - arg:
             path: '$.to[*]'
-            matches: ".*@((?!mycompany\\.com$).)+"
+            not_matches: '.*@mycompany\.com$'
     then:
       decision: require_approval
       reason: 'External recipients require approval.'
@@ -46,6 +53,13 @@ rules:
     then:
       decision: require_approval
       reason: 'Calendar events with many attendees require approval.'
+
+  - id: high_risk_needs_approval
+    when:
+      risk_level: ['high']
+    then:
+      decision: require_approval
+      reason: 'High-risk actions require human approval.'
 
   - id: deny_public_post
     when:

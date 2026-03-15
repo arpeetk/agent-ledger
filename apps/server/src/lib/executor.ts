@@ -36,7 +36,7 @@ export async function executeToolCall(req: ToolExecuteRequest): Promise<{
   const engine = getPolicyEngine();
   const capability = getCapability(req.toolName);
   const risk = assessRisk(capability, req.args, engine.orgDomains);
-  const policy = engine.evaluate(capability, req.toolName, req.args);
+  const policy = engine.evaluate(capability, req.toolName, req.args, risk.level);
   const { redactedArgs, fieldsRedacted } = redactArgs(req.args);
   const argsHash = hashValue(stableStringify(req.args));
   const idempotencyKey = computeIdempotencyKey(req.session.sessionId, req.toolName, req.args);
@@ -354,31 +354,9 @@ async function verifyExecution(
   }
 }
 
-interface DbReceipt {
-  id: string;
-  createdAt: Date;
-  sessionId: string;
-  agentId: string;
-  userId: string | null;
-  environment: string | null;
-  toolName: string;
-  capability: string;
-  intent: string | null;
-  argsHash: string;
-  idempotencyKey: string | null;
-  approvalStatus: string | null;
-  approvedBy: string | null;
-  approvalComment: string | null;
-  approvedAt: Date | null;
-  executionStatus: string | null;
-  executionAttempts: number;
-  resultHash: string | null;
-  latencyMs: number | null;
-  receiptVersion?: string;
-}
-
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function buildActionReceipt(
-  dbReceipt: DbReceipt,
+  dbReceipt: any,
   req: ToolExecuteRequest | null,
   capability: string,
   risk: { level: string; reasons: string[] },
@@ -419,7 +397,7 @@ function buildActionReceipt(
     },
     approval: dbReceipt.approvalStatus
       ? {
-          status: dbReceipt.approvalStatus as 'approved' | 'denied',
+          status: dbReceipt.approvalStatus,
           actor: dbReceipt.approvedBy ?? undefined,
           comment: dbReceipt.approvalComment ?? undefined,
           timestamp: dbReceipt.approvedAt?.toISOString(),
@@ -429,7 +407,7 @@ function buildActionReceipt(
       ? {
           status: executionResult.success ? 'success' : 'failed',
           attempts: executionResult.attempts,
-          idempotency_key: dbReceipt.idempotencyKey ?? '',
+          idempotency_key: dbReceipt.idempotencyKey,
           result_hash: executionResult.data
             ? hashValue(stableStringify(executionResult.data))
             : undefined,
@@ -439,7 +417,7 @@ function buildActionReceipt(
         ? {
             status: dbReceipt.executionStatus as 'success' | 'failed' | 'skipped',
             attempts: dbReceipt.executionAttempts,
-            idempotency_key: dbReceipt.idempotencyKey ?? '',
+            idempotency_key: dbReceipt.idempotencyKey,
             result_hash: dbReceipt.resultHash ?? undefined,
             latency_ms: dbReceipt.latencyMs ?? undefined,
           }
@@ -485,7 +463,7 @@ export async function evaluateToolCall(req: ToolExecuteRequest): Promise<{
   const engine = getPolicyEngine();
   const capability = getCapability(req.toolName);
   const risk = assessRisk(capability, req.args, engine.orgDomains);
-  const policy = engine.evaluate(capability, req.toolName, req.args);
+  const policy = engine.evaluate(capability, req.toolName, req.args, risk.level);
   const { redactedArgs, fieldsRedacted } = redactArgs(req.args);
   const argsHash = hashValue(stableStringify(req.args));
   const idempotencyKey = computeIdempotencyKey(req.session.sessionId, req.toolName, req.args);
@@ -651,7 +629,7 @@ export async function reportExecution(
     execution: {
       status: report.success ? 'success' : 'failed',
       attempts: 1,
-      idempotency_key: updated.idempotencyKey,
+      idempotency_key: updated.idempotencyKey ?? '',
       result_hash: resultHash ?? undefined,
       latency_ms: report.latencyMs,
     },

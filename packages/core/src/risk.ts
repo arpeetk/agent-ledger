@@ -43,6 +43,11 @@ export function assessRisk(
     reasons.push('public_post');
   }
 
+  // Unknown tool
+  if (capability === 'UNKNOWN') {
+    reasons.push('unknown_tool');
+  }
+
   const level = computeLevel(reasons);
   return { level, reasons };
 }
@@ -52,7 +57,8 @@ function computeLevel(reasons: RiskReason[]): RiskLevel {
   if (
     reasons.includes('delete_action') ||
     reasons.includes('public_post') ||
-    reasons.includes('external_recipient')
+    reasons.includes('external_recipient') ||
+    reasons.includes('unknown_tool')
   ) {
     return 'high';
   }

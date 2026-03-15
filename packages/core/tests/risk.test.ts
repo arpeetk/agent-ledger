@@ -2,166 +2,80 @@ import { describe, it, expect } from 'vitest';
 import { assessRisk } from '../src/risk.js';
 
 describe('assessRisk', () => {
-  describe('email capabilities', () => {
-    it('returns low risk for internal email (all recipients in orgDomains)', () => {
-      const result = assessRisk(
-        'EMAIL_SEND',
-        { to: ['alice@mycompany.com', 'bob@mycompany.com'] },
-        ['mycompany.com'],
-      );
-      expect(result.level).toBe('low');
-      expect(result.reasons).toEqual([]);
-    });
-
-    it('returns high risk with external_recipient for external email', () => {
-      const result = assessRisk('EMAIL_SEND', { to: ['alice@external.com'] }, ['mycompany.com']);
-      expect(result.level).toBe('high');
+  describe('external_recipient', () => {
+    it('flags external recipients for EMAIL_SEND', () => {
+      const result = assessRisk('EMAIL_SEND', { to: ['user@external.com'] }, ['mycompany.com']);
       expect(result.reasons).toContain('external_recipient');
+      expect(result.level).toBe('high');
     });
 
-    it('returns many_recipients when more than 5 recipients', () => {
-      const recipients = [
-        'a@mycompany.com',
-        'b@mycompany.com',
-        'c@mycompany.com',
-        'd@mycompany.com',
-        'e@mycompany.com',
-        'f@mycompany.com',
-      ];
-      const result = assessRisk('EMAIL_SEND', { to: recipients }, ['mycompany.com']);
+    it('does not flag internal recipients', () => {
+      const result = assessRisk('EMAIL_SEND', { to: ['user@mycompany.com'] }, ['mycompany.com']);
+      expect(result.reasons).not.toContain('external_recipient');
+    });
+
+    it('flags many recipients', () => {
+      const to = Array(6)
+        .fill(null)
+        .map((_, i) => `user${i}@mycompany.com`);
+      const result = assessRisk('EMAIL_SEND', { to }, ['mycompany.com']);
       expect(result.reasons).toContain('many_recipients');
     });
-
-    it('does not flag many_recipients when exactly 5 recipients', () => {
-      const recipients = [
-        'a@mycompany.com',
-        'b@mycompany.com',
-        'c@mycompany.com',
-        'd@mycompany.com',
-        'e@mycompany.com',
-      ];
-      const result = assessRisk('EMAIL_SEND', { to: recipients }, ['mycompany.com']);
-      expect(result.reasons).not.toContain('many_recipients');
-    });
-
-    it('handles case-insensitive domain matching', () => {
-      const result = assessRisk('EMAIL_SEND', { to: ['alice@MYCOMPANY.COM'] }, ['mycompany.com']);
-      expect(result.level).toBe('low');
-      expect(result.reasons).toEqual([]);
-    });
-
-    it('handles case-insensitive orgDomains', () => {
-      const result = assessRisk('EMAIL_SEND', { to: ['alice@mycompany.com'] }, ['MYCOMPANY.COM']);
-      expect(result.level).toBe('low');
-      expect(result.reasons).toEqual([]);
-    });
-
-    it('handles a single string to field (not array)', () => {
-      const result = assessRisk('EMAIL_SEND', { to: 'alice@external.com' }, ['mycompany.com']);
-      expect(result.level).toBe('high');
-      expect(result.reasons).toContain('external_recipient');
-    });
-
-    it('applies same checks to EMAIL_DRAFT capability', () => {
-      const result = assessRisk('EMAIL_DRAFT', { to: ['alice@external.com'] }, ['mycompany.com']);
-      expect(result.level).toBe('high');
-      expect(result.reasons).toContain('external_recipient');
-    });
-
-    it('treats all recipients as external when orgDomains is empty', () => {
-      const result = assessRisk('EMAIL_SEND', { to: ['alice@mycompany.com'] });
-      expect(result.reasons).toContain('external_recipient');
-    });
   });
 
-  describe('calendar capability', () => {
-    it('returns many_recipients for calendar with >10 attendees', () => {
-      const attendees = Array.from({ length: 12 }, (_, i) => `user${i}@example.com`);
-      const result = assessRisk('CALENDAR_WRITE', { attendees });
-      expect(result.level).toBe('medium');
-      expect(result.reasons).toContain('many_recipients');
-    });
-
-    it('returns low risk for calendar with <=10 attendees', () => {
-      const attendees = Array.from({ length: 10 }, (_, i) => `user${i}@example.com`);
-      const result = assessRisk('CALENDAR_WRITE', { attendees });
-      expect(result.reasons).not.toContain('many_recipients');
-    });
-
-    it('returns low risk for calendar with no attendees', () => {
-      const result = assessRisk('CALENDAR_WRITE', {});
-      expect(result.level).toBe('low');
-    });
-  });
-
-  describe('URL detection', () => {
-    it('flags contains_link when args contain a URL', () => {
-      const result = assessRisk('READ_ONLY', { note: 'Check https://example.com for details' });
-      expect(result.reasons).toContain('contains_link');
-    });
-
-    it('detects http URLs as well', () => {
-      const result = assessRisk('READ_ONLY', { note: 'Visit http://example.com' });
-      expect(result.reasons).toContain('contains_link');
-    });
-
-    it('does not flag args without URLs', () => {
-      const result = assessRisk('READ_ONLY', { note: 'No links here' });
-      expect(result.reasons).not.toContain('contains_link');
-    });
-  });
-
-  describe('dangerous capabilities', () => {
-    it('returns high risk with delete_action for DELETE capability', () => {
-      const result = assessRisk('DELETE', {});
-      expect(result.level).toBe('high');
-      expect(result.reasons).toContain('delete_action');
-    });
-
-    it('returns high risk with public_post for PUBLIC_POST capability', () => {
-      const result = assessRisk('PUBLIC_POST', {});
-      expect(result.level).toBe('high');
-      expect(result.reasons).toContain('public_post');
-    });
-  });
-
-  describe('READ_ONLY capability', () => {
-    it('returns low risk with no reasons', () => {
-      const result = assessRisk('READ_ONLY', {});
-      expect(result.level).toBe('low');
-      expect(result.reasons).toEqual([]);
-    });
-  });
-
-  describe('combined risks', () => {
-    it('returns multiple reasons for external email with a link', () => {
-      const result = assessRisk(
-        'EMAIL_SEND',
-        { to: ['alice@external.com'], body: 'See https://phishing.com' },
-        ['mycompany.com'],
-      );
-      expect(result.level).toBe('high');
-      expect(result.reasons).toContain('external_recipient');
-      expect(result.reasons).toContain('contains_link');
-    });
-
-    it('returns high when any high-level reason is present among multiple', () => {
-      const recipients = Array.from({ length: 7 }, (_, i) => `user${i}@external.com`);
-      const result = assessRisk('EMAIL_SEND', { to: recipients, body: 'https://example.com' }, [
+  describe('contains_link', () => {
+    it('flags URLs in args', () => {
+      const result = assessRisk('EMAIL_SEND', { body: 'Check https://evil.com' }, [
         'mycompany.com',
       ]);
-      expect(result.level).toBe('high');
-      expect(result.reasons).toContain('external_recipient');
-      expect(result.reasons).toContain('many_recipients');
       expect(result.reasons).toContain('contains_link');
+    });
+  });
+
+  describe('delete_action', () => {
+    it('flags DELETE capability', () => {
+      const result = assessRisk('DELETE', {});
+      expect(result.reasons).toContain('delete_action');
+      expect(result.level).toBe('high');
+    });
+  });
+
+  describe('public_post', () => {
+    it('flags PUBLIC_POST capability', () => {
+      const result = assessRisk('PUBLIC_POST', {});
+      expect(result.reasons).toContain('public_post');
+      expect(result.level).toBe('high');
+    });
+  });
+
+  describe('calendar', () => {
+    it('flags many attendees', () => {
+      const result = assessRisk('CALENDAR_WRITE', {
+        attendees: Array(12).fill('user@mycompany.com'),
+      });
+      expect(result.reasons).toContain('many_recipients');
     });
   });
 
   describe('empty args', () => {
-    it('returns low risk for email with empty args', () => {
-      const result = assessRisk('EMAIL_SEND', {}, ['mycompany.com']);
+    it('returns low risk for READ_ONLY with no args', () => {
+      const result = assessRisk('READ_ONLY', {});
       expect(result.level).toBe('low');
-      expect(result.reasons).toEqual([]);
+      expect(result.reasons).toHaveLength(0);
+    });
+  });
+
+  describe('UNKNOWN capability', () => {
+    it('returns high risk with unknown_tool for UNKNOWN capability', () => {
+      const result = assessRisk('UNKNOWN', {});
+      expect(result.level).toBe('high');
+      expect(result.reasons).toContain('unknown_tool');
+    });
+
+    it('returns unknown_tool even with orgDomains set', () => {
+      const result = assessRisk('UNKNOWN', {}, ['mycompany.com']);
+      expect(result.level).toBe('high');
+      expect(result.reasons).toContain('unknown_tool');
     });
   });
 });

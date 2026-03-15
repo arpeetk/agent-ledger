@@ -11,6 +11,7 @@ const VALID_CAPABILITIES: Capability[] = [
   'DELETE',
   'PUBLIC_POST',
   'PAYMENTS',
+  'UNKNOWN',
 ];
 
 describe('getCapability', () => {
@@ -34,16 +35,16 @@ describe('getCapability', () => {
   });
 
   describe('unknown tools', () => {
-    it('defaults to READ_ONLY for an unknown tool', () => {
-      expect(getCapability('unknown.tool')).toBe('READ_ONLY');
+    it('defaults to UNKNOWN for an unknown tool', () => {
+      expect(getCapability('unknown.tool')).toBe('UNKNOWN');
     });
 
-    it('defaults to READ_ONLY for an empty string', () => {
-      expect(getCapability('')).toBe('READ_ONLY');
+    it('defaults to UNKNOWN for an empty string', () => {
+      expect(getCapability('')).toBe('UNKNOWN');
     });
 
-    it('defaults to READ_ONLY for a similar but non-matching tool name', () => {
-      expect(getCapability('gmail.delete')).toBe('READ_ONLY');
+    it('defaults to UNKNOWN for a similar but non-matching tool name', () => {
+      expect(getCapability('gmail.delete')).toBe('UNKNOWN');
     });
   });
 

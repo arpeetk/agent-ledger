@@ -18,5 +18,5 @@ const TOOL_CAPABILITY_MAP: Record<string, Capability> = {
 };
 
 export function getCapability(toolName: string): Capability {
-  return TOOL_CAPABILITY_MAP[toolName] ?? 'READ_ONLY';
+  return TOOL_CAPABILITY_MAP[toolName] ?? 'UNKNOWN';
 }
