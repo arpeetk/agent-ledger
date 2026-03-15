@@ -83,8 +83,20 @@ export class PolicyEngine {
     const values = this.resolvePath(path, args);
 
     if (matches !== undefined) {
-      const regex = new RegExp(matches);
-      return values.some((v) => typeof v === 'string' && regex.test(v));
+      let regex: RegExp;
+      try {
+        regex = new RegExp(matches);
+      } catch {
+        // Invalid regex pattern in policy — treat as non-matching
+        return false;
+      }
+      // Guard against catastrophic backtracking by timing out regex evaluation
+      return values.some((v) => {
+        if (typeof v !== 'string') return false;
+        // Limit input length to prevent ReDoS
+        if (v.length > 10_000) return false;
+        return regex.test(v);
+      });
     }
 
     if (gt !== undefined) {

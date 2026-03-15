@@ -17,7 +17,10 @@ const { eventRoutes } = await import('./routes/events.js');
 
 const app = Fastify({ logger: true });
 
-await app.register(cors, { origin: true });
+const corsOrigins = process.env.CORS_ORIGINS
+  ? process.env.CORS_ORIGINS.split(',').map((o) => o.trim())
+  : true;
+await app.register(cors, { origin: corsOrigins });
 
 await app.register(toolRoutes);
 await app.register(receiptRoutes);

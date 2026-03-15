@@ -77,8 +77,8 @@ export async function receiptRoutes(app: FastifyInstance) {
           rl.close();
           break;
         }
-      } catch {
-        // Skip malformed lines
+      } catch (err) {
+        app.log.warn({ err, line: line.slice(0, 100) }, 'Skipping malformed ledger line');
       }
     }
 
@@ -311,8 +311,47 @@ export async function receiptRoutes(app: FastifyInstance) {
   });
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function formatReceipt(r: any) {
+interface DbReceiptRow {
+  id: string;
+  status: string;
+  createdAt: Date;
+  finalizedAt: Date | null;
+  toolName: string;
+  capability: string;
+  riskLevel: string;
+  riskReasons: string;
+  intent: string | null;
+  redactedArgs: string;
+  policyId: string;
+  policyDecision: string;
+  matchedRules: string;
+  policyExplanation: string | null;
+  approvalStatus: string | null;
+  approvedBy: string | null;
+  approvalComment: string | null;
+  executionStatus: string | null;
+  executionAttempts: number;
+  verificationStatus: string | null;
+  verificationMethod: string | null;
+  verificationSnapshot: string | null;
+  diffSummary: string | null;
+  signatureB64: string | null;
+  signatureAlg: string | null;
+  publicKeyId: string | null;
+  sessionId: string;
+  agentId: string;
+  userId: string | null;
+  environment: string | null;
+  argsHash: string;
+  idempotencyKey: string | null;
+  resultHash: string | null;
+  latencyMs: number | null;
+  approvedAt: Date | null;
+  fieldsRedacted: string | null;
+  receiptVersion?: string;
+}
+
+function formatReceipt(r: DbReceiptRow) {
   return {
     id: r.id,
     status: r.status,
@@ -340,8 +379,7 @@ function formatReceipt(r: any) {
   };
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function dbToActionReceipt(r: any): ActionReceipt {
+function dbToActionReceipt(r: DbReceiptRow): ActionReceipt {
   return {
     receipt_version: r.receiptVersion ?? '0.1',
     receipt_id: r.id,
@@ -354,21 +392,24 @@ function dbToActionReceipt(r: any): ActionReceipt {
     },
     request: {
       tool_name: r.toolName,
-      capability: r.capability,
-      risk: { level: r.riskLevel, reasons: JSON.parse(r.riskReasons) },
+      capability: r.capability as ActionReceipt['request']['capability'],
+      risk: {
+        level: r.riskLevel as ActionReceipt['request']['risk']['level'],
+        reasons: JSON.parse(r.riskReasons),
+      },
       intent: r.intent ?? undefined,
       args_hash: r.argsHash,
       redacted_args: JSON.parse(r.redactedArgs),
     },
     policy: {
       policy_id: r.policyId,
-      decision: r.policyDecision,
+      decision: r.policyDecision as ActionReceipt['policy']['decision'],
       matched_rules: JSON.parse(r.matchedRules),
       explanation: r.policyExplanation ?? '',
     },
     approval: r.approvalStatus
       ? {
-          status: r.approvalStatus,
+          status: r.approvalStatus as 'approved' | 'denied',
           actor: r.approvedBy ?? undefined,
           comment: r.approvalComment ?? undefined,
           timestamp: r.approvedAt?.toISOString(),
@@ -376,7 +417,7 @@ function dbToActionReceipt(r: any): ActionReceipt {
       : undefined,
     execution: r.executionStatus
       ? {
-          status: r.executionStatus,
+          status: r.executionStatus as 'success' | 'failed' | 'skipped',
           attempts: r.executionAttempts,
           idempotency_key: r.idempotencyKey ?? '',
           result_hash: r.resultHash ?? undefined,
@@ -385,9 +426,11 @@ function dbToActionReceipt(r: any): ActionReceipt {
       : undefined,
     verification: r.verificationMethod
       ? {
-          method: r.verificationMethod,
-          status: r.verificationStatus ?? 'unverified',
-          after_snapshot: r.verificationSnapshot ? JSON.parse(r.verificationSnapshot) : undefined,
+          method: r.verificationMethod as 'read_after_write' | 'none',
+          status: (r.verificationStatus ?? 'unverified') as 'verified' | 'unverified' | 'failed',
+          after_snapshot: r.verificationSnapshot
+            ? (JSON.parse(r.verificationSnapshot) as Record<string, unknown>)
+            : undefined,
           diff_summary: r.diffSummary ?? undefined,
         }
       : undefined,

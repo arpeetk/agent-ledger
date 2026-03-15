@@ -1,8 +1,12 @@
 # agent-ledger
 
-**Policy-gated tool execution for AI agents, with approvals, verification, and signed action receipts.**
+**The open-source audit trail for agent actions.**
 
-`agent-ledger` is a control plane that sits between an AI agent and its tools/APIs. It enforces **allow/deny/require-approval** policies, executes tool calls with **idempotency**, verifies outcomes, and emits **tamper-evident, signed "Action Receipts"** you can audit, reconcile, and debug.
+Signed receipts. Policy enforcement. Human-in-the-loop approvals. The missing control plane between your AI agents and the real world.
+
+[![License: Apache-2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
+[![TypeScript](https://img.shields.io/badge/TypeScript-strict-blue.svg)]()
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
 > Mental model: **Terraform plan/apply + OPA-style policy + Stripe receipts — for agent actions.**
 
@@ -10,15 +14,47 @@
 
 ## Why
 
-As agents start taking real actions (send emails, create calendar events, share files), teams need answers to:
+AI agents are taking real actions: sending emails, scheduling meetings, modifying data, making payments. But the tooling ecosystem has a blind spot. Frameworks like LangChain, CrewAI, and AutoGen make it easy to _give_ agents tools — but none of them answer the hard questions that come after:
 
-- **Was this action allowed under policy?**
-- **Who approved it (if required)?**
-- **What actually changed?**
-- **Can we prove it later?**
-- **How do we debug "why did the agent do that?"**
+- **Was this action authorized under policy?**
+- **Who approved it, and when?**
+- **What exactly changed in the downstream system?**
+- **Can we produce a tamper-evident audit record for compliance?**
+- **How do we replay and debug "why did the agent do that?"**
 
-`agent-ledger` provides a single interception layer to make agent tool use **safe, auditable, and debuggable**.
+These are not hypothetical concerns. The **EU AI Act** requires audit trails for high-risk AI systems. Enterprise security teams demand approval workflows before agents touch production systems. SOC 2 and ISO 27001 auditors want evidence that AI-driven actions are logged, verified, and tamper-proof.
+
+**No existing framework provides this.** Guardrails libraries filter prompts and outputs. Observability tools record traces. But nobody signs the receipts. Nobody verifies what actually happened. Nobody builds the approval workflow into the execution path itself.
+
+`agent-ledger` is a control plane that sits between any AI agent and its tools/APIs. It enforces **allow/deny/require-approval** policies, executes tool calls with **idempotency and retries**, verifies outcomes with read-after-write checks, and emits **cryptographically signed, tamper-evident Action Receipts** — a compliance-safe audit trail you can store, export, and defend in front of auditors.
+
+**What makes it different:**
+
+- **Signed, tamper-evident receipts** — ed25519 signatures over canonicalized JSON. Every action produces a Stripe-like receipt object that can be independently verified. No other agent framework does this.
+- **Human-in-the-loop approval workflow** — a full dashboard where humans review, approve, or deny pending actions with context: tool, capability, risk assessment, intent, and policy explanation.
+- **Read-after-write verification** — after execution, the system reads back the result from the downstream API and records a verification snapshot. You know what _actually_ happened, not just what the agent _intended_.
+- **Redaction-aware audit trail** — sensitive data (email bodies, calendar descriptions) is hashed, not stored. Metadata (recipients, subjects, timestamps) is preserved. Compliant by default.
+- **Idempotent execution** — payment-system patterns applied to AI. Duplicate tool calls are detected and deduplicated. Transient failures retry with exponential backoff. No double-sends.
+
+---
+
+## How It's Different
+
+Agent Ledger occupies a unique position in the AI safety tooling landscape. Existing solutions focus on prompt filtering or output guardrails — none combine policy enforcement, approval workflows, and signed receipts into a single control plane.
+
+| Feature                                                   | Galileo AI Control | LlamaFirewall | NeMo Guardrails     | **Agent Ledger**               |
+| --------------------------------------------------------- | ------------------ | ------------- | ------------------- | ------------------------------ |
+| Signed, tamper-evident receipts                           | No                 | No            | No                  | **Yes (ed25519)**              |
+| Approval UI / human-in-the-loop                           | No                 | No            | No                  | **Yes (full dashboard)**       |
+| Read-after-write verification                             | No                 | No            | No                  | **Yes**                        |
+| Redaction policy (compliance-safe)                        | No                 | No            | No                  | **Yes**                        |
+| Idempotent execution + retries                            | No                 | No            | No                  | **Yes**                        |
+| YAML policy engine                                        | No                 | No            | Colang (custom DSL) | **Yes (YAML)**                 |
+| Framework adapters (Vercel AI, LangChain, Anthropic, MCP) | Partial            | No            | LangChain only      | **Yes (all major frameworks)** |
+| Prompt/output filtering                                   | Yes                | Yes           | Yes                 | Not in scope (complementary)   |
+| Open source                                               | No                 | Yes           | Yes                 | **Yes (Apache-2.0)**           |
+
+Agent Ledger is **complementary** to guardrails libraries. Use NeMo Guardrails or LlamaFirewall for prompt safety. Use Agent Ledger for everything that happens _after_ the model decides to call a tool.
 
 ---
 
@@ -529,6 +565,18 @@ See [`docs/threat-model.md`](docs/threat-model.md).
 - More verification modes (diff snapshots, provider webhooks)
 - Policy versioning and rollback
 - Receipt export (CSV, Parquet) for compliance reporting
+- Webhook integrations for Slack and PagerDuty (approval notifications, denial alerts)
+- Rate limiting per agent and per capability
+- SOC 2 / ISO 27001 evidence pack generation
+
+---
+
+## Built For
+
+- **Compliance teams** auditing agent actions and producing evidence for regulators (EU AI Act, SOC 2, ISO 27001)
+- **Engineering teams** adding guardrails and audit trails to production AI agents
+- **Security teams** preventing unauthorized tool access and enforcing least-privilege policies
+- **Teams building approval workflows** for high-risk AI actions (payments, external communications, data deletion)
 
 ---
 

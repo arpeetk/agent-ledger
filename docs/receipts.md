@@ -6,57 +6,81 @@ Every tool call that passes through the gateway produces a signed receipt. Recei
 
 ```json
 {
-  "schema_version": "0.1",
-  "receipt_id": "rec_01JQ3K...",
-  "timestamp": "2026-02-16T12:00:00.000Z",
-  "agent_id": "agent_default",
-  "tool": "gmail.send",
-  "capability": "email:send",
-  "args_hash": "sha256:ab3f…",
-  "decision": "allow",
-  "decision_reason": "Internal recipient",
-  "policy_id": "org-email-policy",
-  "rule_id": "allow-internal",
-  "idempotency_key": "idem_7f2c…",
+  "receipt_version": "0.1",
+  "receipt_id": "clx7abc123def",
+  "timestamp": "2026-03-15T12:00:00.000Z",
+  "session": {
+    "sessionId": "sess_01",
+    "agentId": "my-agent",
+    "userId": "user-123",
+    "environment": "production"
+  },
+  "request": {
+    "tool_name": "gmail.send",
+    "capability": "EMAIL_SEND",
+    "risk": {
+      "level": "low",
+      "reasons": []
+    },
+    "intent": "Send Q1 review to team",
+    "args_hash": "sha256:ab3f...",
+    "redacted_args": {
+      "to": ["alice@mycompany.com"],
+      "subject": "Q1 Review",
+      "body_hash": "sha256:9e1d..."
+    }
+  },
+  "policy": {
+    "policy_id": "default-v1",
+    "decision": "allow",
+    "matched_rules": ["allow_internal_email"],
+    "explanation": "Internal recipients only"
+  },
+  "approval": null,
   "execution": {
     "status": "success",
-    "duration_ms": 342,
-    "retries": 0,
-    "connector": "gmail",
-    "external_id": "msg_18a3…"
+    "attempts": 1,
+    "idempotency_key": "sha256:7f2c...",
+    "result_hash": "sha256:d4e5...",
+    "latency_ms": 342
   },
   "verification": {
-    "type": "read-after-write",
-    "passed": true,
-    "checked_at": "2026-02-16T12:00:01.000Z"
+    "method": "read_after_write",
+    "status": "verified",
+    "after_snapshot": { "messageId": "msg_18a3", "isDraft": false },
+    "diff_summary": "Created gmail.send artifact msg_18a3"
   },
-  "description": "Sent email to alice@acme.com",
-  "body_hash": "sha256:9e1d…",
-  "signature": "base64-encoded-ed25519-signature"
+  "redaction": {
+    "fields_redacted": ["body"]
+  },
+  "signature": {
+    "alg": "ed25519",
+    "public_key_id": "base64-encoded-public-key",
+    "signature_b64": "base64-encoded-ed25519-signature"
+  }
 }
 ```
 
 ### Field Reference
 
-| Field             | Type   | Description                                                                                                                  |
-| ----------------- | ------ | ---------------------------------------------------------------------------------------------------------------------------- |
-| `schema_version`  | string | Always `"0.1"` for this version.                                                                                             |
-| `receipt_id`      | string | Unique receipt identifier.                                                                                                   |
-| `timestamp`       | string | ISO 8601 timestamp of when the receipt was created.                                                                          |
-| `agent_id`        | string | Identifier of the agent that made the call.                                                                                  |
-| `tool`            | string | Raw tool name as invoked by the agent.                                                                                       |
-| `capability`      | string | Classified capability (e.g. `email:send`).                                                                                   |
-| `args_hash`       | string | SHA-256 hash of the canonicalized call arguments.                                                                            |
-| `decision`        | string | Policy decision: `allow`, `deny`, or `require_approval`.                                                                     |
-| `decision_reason` | string | Human-readable reason from the matched rule.                                                                                 |
-| `policy_id`       | string | ID of the policy that was evaluated.                                                                                         |
-| `rule_id`         | string | ID of the rule that matched, or `"default"` if none matched.                                                                 |
-| `idempotency_key` | string | Key used to deduplicate retries.                                                                                             |
-| `execution`       | object | Present only if the call was executed. Contains `status`, `duration_ms`, `retries`, `connector`, and optional `external_id`. |
-| `verification`    | object | Present only for Tier-1 actions. Contains `type`, `passed`, and `checked_at`.                                                |
-| `description`     | string | Short human-readable summary of the action. May be redacted.                                                                 |
-| `body_hash`       | string | SHA-256 hash of the full request body. Used when the body is redacted.                                                       |
-| `signature`       | string | Base64-encoded ed25519 signature over the canonicalized receipt.                                                             |
+| Field                   | Type   | Description                                                                                                        |
+| ----------------------- | ------ | ------------------------------------------------------------------------------------------------------------------ |
+| `receipt_version`       | string | Always `"0.1"` for this version.                                                                                   |
+| `receipt_id`            | string | Unique receipt identifier (CUID).                                                                                  |
+| `timestamp`             | string | ISO 8601 timestamp of when the receipt was created.                                                                |
+| `session`               | object | Contains `sessionId`, `agentId`, optional `userId` and `environment`.                                              |
+| `request.tool_name`     | string | Raw tool name as invoked by the agent (e.g. `gmail.send`).                                                         |
+| `request.capability`    | string | Classified capability (e.g. `EMAIL_SEND`, `CALENDAR_WRITE`).                                                       |
+| `request.risk`          | object | Risk assessment: `level` (`low`/`medium`/`high`) and `reasons` array.                                              |
+| `request.intent`        | string | Optional human-readable intent provided by the agent.                                                              |
+| `request.args_hash`     | string | SHA-256 hash of the canonicalized call arguments.                                                                  |
+| `request.redacted_args` | object | Safe metadata from the call arguments. Sensitive fields are replaced with `<field>_hash`.                          |
+| `policy`                | object | Policy evaluation result: `policy_id`, `decision`, `matched_rules`, `explanation`.                                 |
+| `approval`              | object | Present when approval was required. Contains `status` (`approved`/`denied`), `actor`, `comment`, `timestamp`.      |
+| `execution`             | object | Present when the call was executed. Contains `status`, `attempts`, `idempotency_key`, `result_hash`, `latency_ms`. |
+| `verification`          | object | Present for Tier-1 actions. Contains `method`, `status`, `after_snapshot`, `diff_summary`.                         |
+| `redaction`             | object | Lists which argument fields were redacted: `fields_redacted` array.                                                |
+| `signature`             | object | Ed25519 signature: `alg`, `public_key_id`, `signature_b64`.                                                        |
 
 ## Signing
 
@@ -64,15 +88,15 @@ Receipts are signed to make tampering detectable. The signing process is:
 
 1. **Canonicalize.** Build the receipt object without the `signature` field. Pass it through `stableStringify` -- a deterministic JSON serializer that sorts keys and removes undefined values.
 2. **Sign.** Compute an ed25519 signature over the canonical byte string using the server's private key.
-3. **Encode.** Base64-encode the signature and set it as the `signature` field on the receipt.
+3. **Encode.** Base64-encode the signature and set it as `signature.signature_b64` on the receipt.
 
 ```
 canonical = stableStringify(receipt without signature)
 signature = ed25519.sign(canonical, privateKey)
-receipt.signature = base64(signature)
+receipt.signature = { alg: 'ed25519', public_key_id: base64(publicKey), signature_b64: base64(signature) }
 ```
 
-The server's ed25519 key pair is generated on first boot and stored in the server's data directory.
+The server's ed25519 key pair is generated on first boot and stored in the server's data directory. Set `SIGNING_PUBLIC_KEY` and `SIGNING_PRIVATE_KEY` environment variables for persistent keys across restarts.
 
 ## Verification
 
@@ -86,21 +110,22 @@ Response:
 
 ```json
 {
-  "valid": true,
-  "receipt_id": "rec_01JQ3K...",
-  "verified_at": "2026-02-16T12:05:00.000Z"
+  "valid": true
 }
 ```
 
-The endpoint re-canonicalizes the stored receipt and checks the signature against the server's public key. It returns `valid: false` if the receipt has been modified or the signature does not match.
+The endpoint reads the receipt from the append-only JSONL ledger, re-canonicalizes it, and checks the signature against the server's public key. It returns `valid: false` if the receipt has been modified or the signature does not match.
 
 ## Redaction Policy
 
-Receipts may contain sensitive data in `description` and the original call arguments. The redaction policy controls what is stored in the ledger:
+Receipts never store sensitive content in cleartext. The redaction policy controls what is kept:
 
-- **Body**: The full request body is never stored in the receipt. Only `body_hash` (a SHA-256 hash) is kept, allowing verification that a body matches without exposing its content.
-- **Description**: For sensitive capabilities (e.g. `email:send`), the description is hashed before storage. The original text is not recoverable from the ledger.
-- **Safe metadata**: Fields like `receipt_id`, `timestamp`, `tool`, `capability`, `decision`, `policy_id`, `rule_id`, and `execution.status` are always stored in cleartext. These are considered safe for audit purposes.
+- **Redacted fields**: `body`, `description`, `content`, `message` — replaced with `<field>_hash` (SHA-256). The original text is not recoverable from the ledger.
+- **Safe metadata**: `to`, `from`, `cc`, `bcc`, `subject`, `title`, `startTime`, `endTime`, `attendees`, `isDraft` — stored as-is.
+- **Short strings**: Any other string field under 200 characters is kept. Longer strings are hashed.
+- **Numbers and booleans**: Always kept.
+
+The `redaction.fields_redacted` array in each receipt lists which fields were redacted, enabling consumers to know what was hashed.
 
 ## Ledger Storage
 

@@ -6,7 +6,9 @@ If you discover a security vulnerability in `agent-ledger`, please report it res
 
 **Do NOT open a public GitHub issue for security vulnerabilities.**
 
-Instead, email: **security@example.com** (replace with your actual security contact).
+Instead, please report vulnerabilities through [GitHub Security Advisories](https://github.com/summiteight/agent-ledger/security/advisories/new).
+
+If that is not available, email: **security@summiteight.com**.
 
 Include:
 
@@ -15,7 +17,7 @@ Include:
 - Potential impact
 - Suggested fix (if any)
 
-We will acknowledge receipt within 48 hours and aim to provide a fix within 7 days for critical issues.
+We will acknowledge receipt within 48 hours and aim to provide a fix within 7 days for critical issues. We follow a 90-day disclosure timeline.
 
 ## Supported Versions
 

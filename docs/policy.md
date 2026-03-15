@@ -1,6 +1,6 @@
 # Policy Authoring Guide
 
-Policies are YAML files that define what an agent is allowed to do. The PolicyEngine evaluates them top-down: the first matching rule wins.
+Policies are YAML files that define what an agent is allowed to do. The PolicyEngine evaluates them top-down: the last matching rule wins (all rules are evaluated, the final match determines the decision).
 
 ## File Structure
 
@@ -16,10 +16,11 @@ params:
 rules:
   - id: allow-internal-email
     when:
-      capability: email:send
+      capability: ['EMAIL_SEND', 'EMAIL_DRAFT']
       all:
-        - path: $.to[*]
-          matches: "^.+@(acme\\.com|acme\\.io)$"
+        - arg:
+            path: $.to[*]
+            matches: "^.+@(acme\\.com|acme\\.io)$"
     then:
       decision: allow
       reason: 'Internal recipients only'
@@ -32,7 +33,7 @@ rules:
 | `policy_id` | yes      | Unique identifier for this policy.                                               |
 | `defaults`  | yes      | The decision applied when no rule matches. Must include `decision` and `reason`. |
 | `params`    | no       | Named values reusable across rules (e.g. `org_domains`).                         |
-| `rules`     | yes      | Ordered list of rules. First match wins.                                         |
+| `rules`     | yes      | Ordered list of rules. Last match wins.                                          |
 
 ## Rule Structure
 
@@ -41,10 +42,11 @@ Each rule has three parts: an `id`, a `when` block that defines match conditions
 ```yaml
 - id: require-approval-large-calendar-invite
   when:
-    capability: calendar:create
+    capability: ['CALENDAR_WRITE']
     any:
-      - path: $.attendees.length
-        gt: 10
+      - arg:
+          path: $.attendees.length
+          gt: 10
   then:
     decision: require_approval
     reason: 'Large meetings need approval'
@@ -52,14 +54,31 @@ Each rule has three parts: an `id`, a `when` block that defines match conditions
 
 ### `when` Block
 
-| Field        | Description                                                                       |
-| ------------ | --------------------------------------------------------------------------------- |
-| `capability` | The classified capability string to match (e.g. `email:send`, `calendar:create`). |
-| `tool`       | Match against the raw tool name instead of the classified capability.             |
-| `all`        | List of arg predicates. All must pass.                                            |
-| `any`        | List of arg predicates. At least one must pass.                                   |
+| Field        | Description                                                                         |
+| ------------ | ----------------------------------------------------------------------------------- |
+| `capability` | Array of capability strings to match (e.g. `['EMAIL_SEND']`, `['CALENDAR_WRITE']`). |
+| `tool`       | Array of tool name strings to match instead of capability (e.g. `['gmail.send']`).  |
+| `all`        | List of arg predicates. All must pass.                                              |
+| `any`        | List of arg predicates. At least one must pass.                                     |
 
 You can combine `capability` (or `tool`) with `all` and/or `any` in the same rule. The capability/tool check is always evaluated first.
+
+### Capabilities
+
+Agent Ledger classifies each tool into a capability. These are the built-in capability strings:
+
+| Capability       | Description                           | Tools                                                        |
+| ---------------- | ------------------------------------- | ------------------------------------------------------------ |
+| `READ_ONLY`      | Read-only operations                  | `gmail.get_draft`, `gmail.get_message`, `calendar.get_event` |
+| `EMAIL_DRAFT`    | Draft an email without sending        | `gmail.create_draft`                                         |
+| `EMAIL_SEND`     | Send an email                         | `gmail.send`                                                 |
+| `CALENDAR_WRITE` | Create/modify calendar events         | `calendar.create_event`                                      |
+| `FILE_SHARE`     | Share files externally                | `file.share`                                                 |
+| `DELETE`         | Delete resources                      | `file.delete`                                                |
+| `PUBLIC_POST`    | Post to public channels               | `social.post`                                                |
+| `PAYMENTS`       | Financial transactions (deny-default) | `payments.charge`                                            |
+
+Unknown tools default to `READ_ONLY`.
 
 ### `then` Block
 
@@ -70,7 +89,14 @@ You can combine `capability` (or `tool`) with `all` and/or `any` in the same rul
 
 ## Arg Predicates
 
-Arg predicates inspect the arguments of a tool call using a JSON path and an operator.
+Arg predicates inspect the arguments of a tool call using a JSON path and an operator. Each predicate is wrapped in an `arg:` block:
+
+```yaml
+all:
+  - arg:
+      path: $.to[*]
+      matches: "^.+@acme\\.com$"
+```
 
 | Field     | Description                                                                                                              |
 | --------- | ------------------------------------------------------------------------------------------------------------------------ |
@@ -110,27 +136,29 @@ params:
 rules:
   - id: deny-large-attachments
     when:
-      capability: email:send
+      capability: ['EMAIL_SEND']
       any:
-        - path: $.attachments[*].size
-          gt: 10485760
+        - arg:
+            path: $.attachments[*].size
+            gt: 10485760
     then:
       decision: deny
       reason: 'Attachments must be under 10 MB'
 
   - id: allow-internal
     when:
-      capability: email:send
+      capability: ['EMAIL_SEND']
       all:
-        - path: $.to[*]
-          matches: "^.+@acme\\.com$"
+        - arg:
+            path: $.to[*]
+            matches: "^.+@acme\\.com$"
     then:
       decision: allow
       reason: 'Internal recipient'
 
   - id: approve-external
     when:
-      capability: email:send
+      capability: ['EMAIL_SEND']
     then:
       decision: require_approval
       reason: 'External recipients require approval'
@@ -141,10 +169,11 @@ rules:
 ```yaml
 - id: deny-long-events
   when:
-    capability: calendar:create
+    capability: ['CALENDAR_WRITE']
     any:
-      - path: $.duration_minutes
-        gt: 480
+      - arg:
+          path: $.duration_minutes
+          gt: 480
   then:
     decision: deny
     reason: 'Events longer than 8 hours are not allowed'
@@ -156,8 +185,9 @@ rules:
 - id: deny-oversized-body
   when:
     all:
-      - path: $.body
-        max_len: 50000
+      - arg:
+          path: $.body
+          max_len: 50000
   then:
     decision: deny
     reason: 'Body exceeds maximum length'
@@ -166,6 +196,6 @@ rules:
 ## Evaluation Order
 
 1. Rules are evaluated in list order.
-2. The first rule whose `when` block matches the tool call determines the decision.
+2. The **last** rule whose `when` block matches the tool call determines the decision.
 3. If no rule matches, `defaults.decision` is used.
 4. A missing `defaults` block is treated as `deny`.

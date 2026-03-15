@@ -14,7 +14,9 @@ export function getKeyPair(): KeyPair {
   } else {
     console.log('No signing keys found in env, generating ephemeral key pair...');
     _keyPair = generateKeyPair();
-    console.log(`Public key: ${Buffer.from(_keyPair.publicKey).toString('base64')}`);
+    if (process.env.NODE_ENV !== 'production') {
+      console.log(`Public key: ${Buffer.from(_keyPair.publicKey).toString('base64')}`);
+    }
   }
 
   return _keyPair;

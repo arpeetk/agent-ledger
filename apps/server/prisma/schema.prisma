@@ -46,7 +46,7 @@ model Receipt {
   // Execution
   executionStatus  String?  // success | failed | skipped
   executionAttempts Int     @default(0)
-  idempotencyKey   String?  @unique
+  idempotencyKey   String   @unique
   resultHash       String?
   latencyMs        Int?
 
