@@ -14,12 +14,12 @@ export function NavBar() {
   const pathname = usePathname();
 
   return (
-    <nav className="bg-white border-b border-gray-200 px-6 py-3">
-      <div className="max-w-6xl mx-auto flex items-center gap-6">
-        <Link href="/" className="flex items-center gap-2 font-bold text-lg text-gray-900">
-          <span className="bg-gray-900 text-white px-2 py-0.5 rounded text-sm font-mono">AL</span>
+    <nav className="bg-white border-b border-neutral-200 px-8 h-12 flex items-center">
+      <div className="max-w-5xl mx-auto w-full flex items-center gap-4">
+        <Link href="/" className="font-semibold text-sm text-neutral-900">
           Agent Ledger
         </Link>
+        <div className="w-px h-5 bg-neutral-200" />
         <div className="flex gap-1">
           {NAV_ITEMS.map((item) => {
             const isActive = item.href === '/' ? pathname === '/' : pathname.startsWith(item.href);
@@ -27,13 +27,16 @@ export function NavBar() {
               <Link
                 key={item.href}
                 href={item.href}
-                className={`px-3 py-1.5 rounded text-sm transition-colors ${
+                className={`relative px-3 py-1.5 text-sm transition-colors ${
                   isActive
-                    ? 'bg-gray-100 text-gray-900 font-medium'
-                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                    ? 'text-neutral-900 font-medium'
+                    : 'text-neutral-500 hover:text-neutral-800'
                 }`}
               >
                 {item.label}
+                {isActive && (
+                  <span className="absolute bottom-[-0.6875rem] left-3 right-3 h-0.5 bg-neutral-900 rounded-full" />
+                )}
               </Link>
             );
           })}

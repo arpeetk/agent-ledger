@@ -1,6 +1,12 @@
 import type { Metadata } from 'next';
+import { Inter } from 'next/font/google';
 import { NavBar } from '@/components/NavBar';
 import './globals.css';
+
+const inter = Inter({
+  subsets: ['latin'],
+  variable: '--font-inter',
+});
 
 export const metadata: Metadata = {
   title: 'Agent Ledger',
@@ -9,10 +15,10 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
-      <body className="bg-gray-50 min-h-screen">
+    <html lang="en" className={inter.variable}>
+      <body className="min-h-screen">
         <NavBar />
-        <main className="max-w-6xl mx-auto px-6 py-6">{children}</main>
+        <main className="max-w-5xl mx-auto px-8 py-6">{children}</main>
       </body>
     </html>
   );

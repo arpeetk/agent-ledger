@@ -3,5 +3,23 @@
 @tailwind utilities;
 
 body {
-  @apply bg-gray-50 text-gray-900;
+  @apply bg-neutral-50 text-neutral-700 antialiased;
+}
+
+@layer utilities {
+  .row-hover {
+    @apply transition-colors hover:bg-neutral-100;
+  }
+
+  .skeleton {
+    @apply animate-pulse bg-neutral-150 rounded;
+  }
+
+  .code-block {
+    @apply text-xs bg-neutral-100 p-3 rounded font-mono overflow-auto border border-neutral-150;
+  }
+}
+
+*:focus-visible {
+  @apply outline-none ring-2 ring-semantic-blue ring-offset-1;
 }

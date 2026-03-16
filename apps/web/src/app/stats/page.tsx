@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import type { Receipt } from '@/lib/api';
+import { Skeleton } from '@/components/StatusBadge';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://127.0.0.1:3001';
 
@@ -47,50 +48,34 @@ function computeStats(receipts: Receipt[]): Stats {
   return stats;
 }
 
-function Bar({
-  label,
-  value,
-  max,
-  color,
-}: {
-  label: string;
-  value: number;
-  max: number;
-  color: string;
-}) {
+function Bar({ label, value, max }: { label: string; value: number; max: number }) {
   const pct = max > 0 ? (value / max) * 100 : 0;
   return (
     <div className="flex items-center gap-3">
-      <span className="text-xs text-gray-600 w-32 truncate">{label}</span>
-      <div className="flex-1 bg-gray-100 rounded h-5 overflow-hidden">
-        <div className={`h-full rounded ${color}`} style={{ width: `${pct}%` }} />
+      <span className="text-2xs text-neutral-500 w-32 truncate">{label}</span>
+      <div className="flex-1 bg-neutral-100 rounded h-4 overflow-hidden">
+        <div className="h-full rounded bg-neutral-800" style={{ width: `${pct}%` }} />
       </div>
-      <span className="text-xs font-mono text-gray-500 w-8 text-right">{value}</span>
+      <span className="font-mono text-2xs text-neutral-400 w-8 text-right">{value}</span>
     </div>
   );
 }
 
-function StatCard({
-  title,
-  data,
-  color,
-}: {
-  title: string;
-  data: Record<string, number>;
-  color: string;
-}) {
+function StatCard({ title, data }: { title: string; data: Record<string, number> }) {
   const entries = Object.entries(data).sort((a, b) => b[1] - a[1]);
   const max = entries.length > 0 ? entries[0][1] : 0;
 
   return (
-    <div className="bg-white border border-gray-200 rounded-lg p-5">
-      <h3 className="text-sm font-semibold text-gray-900 mb-3">{title}</h3>
+    <div className="bg-white border border-neutral-200 rounded-md p-5">
+      <h3 className="text-2xs text-neutral-400 uppercase tracking-wide font-medium mb-3">
+        {title}
+      </h3>
       <div className="space-y-2">
         {entries.length === 0 ? (
-          <p className="text-xs text-gray-400">No data</p>
+          <p className="text-2xs text-neutral-400">No data</p>
         ) : (
           entries.map(([label, value]) => (
-            <Bar key={label} label={label} value={value} max={max} color={color} />
+            <Bar key={label} label={label} value={value} max={max} />
           ))
         )}
       </div>
@@ -116,44 +101,45 @@ export default function StatsPage() {
     return () => clearInterval(interval);
   }, []);
 
-  if (loading) return <p className="text-gray-500">Loading...</p>;
-  if (!stats) return null;
+  if (loading) {
+    return (
+      <div>
+        <h1 className="text-base font-semibold text-neutral-900 mb-4">Stats</h1>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Skeleton key={i} className="h-20 w-full" />
+          ))}
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Skeleton key={i} className="h-40 w-full" />
+          ))}
+        </div>
+      </div>
+    );
+  }
 
-  const STATUS_COLORS: Record<string, string> = {
-    executed: 'text-green-700',
-    denied: 'text-red-700',
-    pending_approval: 'text-yellow-700',
-    awaiting_execution: 'text-blue-700',
-    failed: 'text-red-700',
-  };
+  if (!stats) return null;
 
   return (
     <div>
-      <h1 className="text-2xl font-bold mb-6">Stats</h1>
+      <h1 className="text-base font-semibold text-neutral-900 mb-4">Stats</h1>
 
       {/* Summary cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-        <div className="bg-white border border-gray-200 rounded-lg p-4 text-center">
-          <p className="text-3xl font-bold text-gray-900">{stats.total}</p>
-          <p className="text-xs text-gray-500 mt-1">Total Actions</p>
-        </div>
+        <SummaryCard label="Total Actions" value={stats.total} />
         {Object.entries(stats.byStatus).map(([status, count]) => (
-          <div key={status} className="bg-white border border-gray-200 rounded-lg p-4 text-center">
-            <p className={`text-3xl font-bold ${STATUS_COLORS[status] ?? 'text-gray-700'}`}>
-              {count}
-            </p>
-            <p className="text-xs text-gray-500 mt-1">{status.replace('_', ' ')}</p>
-          </div>
+          <SummaryCard key={status} label={status.replace('_', ' ')} value={count} />
         ))}
       </div>
 
       {/* Charts */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <StatCard title="By Tool" data={stats.byTool} color="bg-blue-400" />
-        <StatCard title="By Capability" data={stats.byCapability} color="bg-purple-400" />
-        <StatCard title="By Risk Level" data={stats.byRisk} color="bg-orange-400" />
-        <StatCard title="Policy Rules Hit" data={stats.policyHitRate} color="bg-green-400" />
-        <StatCard title="By Agent" data={stats.byAgent} color="bg-cyan-400" />
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <StatCard title="By Tool" data={stats.byTool} />
+        <StatCard title="By Capability" data={stats.byCapability} />
+        <StatCard title="By Risk Level" data={stats.byRisk} />
+        <StatCard title="Policy Rules Hit" data={stats.policyHitRate} />
+        <StatCard title="By Agent" data={stats.byAgent} />
         <StatCard
           title="Verification"
           data={{
@@ -161,9 +147,17 @@ export default function StatsPage() {
             unverified: stats.verificationRate.unverified,
             failed: stats.verificationRate.failed,
           }}
-          color="bg-emerald-400"
         />
       </div>
+    </div>
+  );
+}
+
+function SummaryCard({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="bg-white border border-neutral-200 rounded-md p-4">
+      <p className="text-2xl font-semibold text-neutral-900">{value}</p>
+      <p className="text-2xs text-neutral-400 uppercase tracking-wide mt-1">{label}</p>
     </div>
   );
 }

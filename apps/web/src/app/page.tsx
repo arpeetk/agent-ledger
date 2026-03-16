@@ -1,13 +1,30 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import type { Receipt } from '@/lib/api';
-import { ReceiptCard } from '@/components/ReceiptCard';
+import { StatusBadge, RiskBadge, TableSkeleton } from '@/components/StatusBadge';
 import { useSSE } from '@/lib/useSSE';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://127.0.0.1:3001';
 
+const FILTERS = [
+  { value: '', label: 'All' },
+  { value: 'pending_approval', label: 'Pending' },
+  { value: 'executed', label: 'Executed' },
+  { value: 'denied', label: 'Denied' },
+];
+
+const STATUS_DOT_COLOR: Record<string, string> = {
+  executed: 'bg-semantic-green',
+  denied: 'bg-semantic-red',
+  pending_approval: 'bg-semantic-amber',
+  failed: 'bg-semantic-red',
+  awaiting_execution: 'bg-semantic-blue',
+};
+
 export default function TimelinePage() {
+  const router = useRouter();
   const [receipts, setReceipts] = useState<Receipt[]>([]);
   const [filter, setFilter] = useState<string>('');
   const [loading, setLoading] = useState(true);
@@ -21,47 +38,90 @@ export default function TimelinePage() {
     setLoading(false);
   }, [filter]);
 
-  // Initial load and on filter change
   useEffect(() => {
     load();
   }, [load]);
 
-  // Real-time updates via SSE (falls back to polling)
   useSSE(load);
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold">Timeline</h1>
-        <div className="flex gap-2">
-          {['', 'pending_approval', 'executed', 'denied'].map((s) => (
+      <div className="flex items-center justify-between mb-4">
+        <h1 className="text-base font-semibold text-neutral-900">Timeline</h1>
+        <div className="flex gap-1.5">
+          {FILTERS.map((f) => (
             <button
-              key={s}
-              onClick={() => setFilter(s)}
-              className={`px-3 py-1 rounded text-sm ${
-                filter === s
-                  ? 'bg-gray-900 text-white'
-                  : 'bg-white border border-gray-300 text-gray-700'
+              key={f.value}
+              onClick={() => setFilter(f.value)}
+              className={`px-2.5 py-1 rounded text-2xs font-medium transition-colors ${
+                filter === f.value
+                  ? 'bg-neutral-900 text-white'
+                  : 'border border-neutral-200 text-neutral-500 hover:bg-neutral-100'
               }`}
             >
-              {s || 'All'}
+              {f.label}
             </button>
           ))}
         </div>
       </div>
 
       {loading ? (
-        <p className="text-gray-500">Loading...</p>
+        <TableSkeleton />
       ) : receipts.length === 0 ? (
-        <p className="text-gray-500">
-          No receipts yet. Run <code className="bg-gray-100 px-1 rounded">npm run demo</code> to
-          generate some.
+        <p className="text-center text-neutral-400 py-12">
+          No receipts yet. Run <code className="code-block inline px-1.5 py-0.5">npm run demo</code>{' '}
+          to generate some.
         </p>
       ) : (
-        <div className="space-y-3">
-          {receipts.map((r) => (
-            <ReceiptCard key={r.id} receipt={r} />
-          ))}
+        <div className="bg-white border border-neutral-200 rounded-md overflow-hidden">
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-neutral-150">
+                <th className="text-left text-2xs uppercase tracking-wider text-neutral-400 font-medium px-3 py-2 w-8" />
+                <th className="text-left text-2xs uppercase tracking-wider text-neutral-400 font-medium px-3 py-2">
+                  Tool
+                </th>
+                <th className="text-left text-2xs uppercase tracking-wider text-neutral-400 font-medium px-3 py-2">
+                  Capability
+                </th>
+                <th className="text-left text-2xs uppercase tracking-wider text-neutral-400 font-medium px-3 py-2">
+                  Risk
+                </th>
+                <th className="text-left text-2xs uppercase tracking-wider text-neutral-400 font-medium px-3 py-2">
+                  Decision
+                </th>
+                <th className="text-right text-2xs uppercase tracking-wider text-neutral-400 font-medium px-3 py-2">
+                  Time
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {receipts.map((r) => (
+                <tr
+                  key={r.id}
+                  onClick={() => router.push(`/receipt/${r.id}`)}
+                  className="h-10 border-b border-neutral-100 last:border-b-0 row-hover cursor-pointer"
+                >
+                  <td className="px-3">
+                    <span
+                      className={`block w-2 h-2 rounded-full ${STATUS_DOT_COLOR[r.status] ?? 'bg-neutral-400'}`}
+                    />
+                  </td>
+                  <td className="px-3 font-mono text-sm text-neutral-800">{r.toolName}</td>
+                  <td className="px-3 text-sm text-neutral-600">{r.capability}</td>
+                  <td className="px-3">
+                    <RiskBadge level={r.riskLevel} />
+                  </td>
+                  <td className="px-3">
+                    <StatusBadge status={r.status} />
+                  </td>
+                  <td className="px-3 text-right text-2xs text-neutral-400 font-mono">
+                    {new Date(r.createdAt).toLocaleTimeString()}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
     </div>

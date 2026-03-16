@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import type { Receipt } from '@/lib/api';
-import { StatusBadge, RiskBadge, VerificationBadge } from '@/components/StatusBadge';
+import { StatusBadge, RiskBadge, VerificationBadge, Skeleton } from '@/components/StatusBadge';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://127.0.0.1:3001';
 
@@ -31,37 +31,48 @@ export default function ReceiptPage() {
     load();
   }, [id]);
 
-  if (loading) return <p className="text-gray-500">Loading...</p>;
-  if (!receipt) return <p className="text-red-500">Receipt not found</p>;
+  if (loading) {
+    return (
+      <div className="max-w-3xl space-y-4">
+        <Skeleton className="h-4 w-24" />
+        <Skeleton className="h-6 w-48" />
+        <Skeleton className="h-64 w-full" />
+      </div>
+    );
+  }
+
+  if (!receipt) return <p className="text-semantic-red text-sm">Receipt not found</p>;
 
   return (
     <div className="max-w-3xl">
       <div className="mb-4">
-        <Link href="/" className="text-sm text-gray-500 hover:text-gray-700">
+        <Link href="/" className="text-sm text-neutral-400 hover:text-neutral-600 transition-colors">
           &larr; Back to Timeline
         </Link>
       </div>
 
-      <div className="flex items-center gap-3 mb-6">
-        <h1 className="text-2xl font-bold">Receipt</h1>
-        <StatusBadge status={receipt.status} />
-        {verified !== null && (
-          <span
-            className={`inline-flex items-center gap-1 px-2.5 py-1 rounded text-xs font-medium ${
-              verified
-                ? 'bg-green-100 text-green-800 border border-green-200'
-                : 'bg-red-100 text-red-800 border border-red-200'
-            }`}
-          >
-            <span className="text-base">{verified ? '\u2713' : '\u2717'}</span>
-            {verified ? 'Signature verified' : 'Signature invalid'}
-          </span>
-        )}
+      <div className="mb-1">
+        <div className="flex items-center gap-3">
+          <h1 className="text-base font-semibold text-neutral-900">Receipt</h1>
+          <StatusBadge status={receipt.status} />
+          {verified !== null && (
+            <span
+              className={`inline-flex items-center gap-1.5 text-2xs font-medium ${
+                verified ? 'text-semantic-green' : 'text-semantic-red'
+              }`}
+            >
+              <span
+                className={`w-1.5 h-1.5 rounded-full ${verified ? 'bg-semantic-green' : 'bg-semantic-red'}`}
+              />
+              {verified ? 'Signature verified' : 'Signature invalid'}
+            </span>
+          )}
+        </div>
+        <p className="font-mono text-2xs text-neutral-400 mt-0.5">{receipt.id}</p>
       </div>
 
-      <div className="bg-white border border-gray-200 rounded-lg divide-y divide-gray-100">
+      <div className="bg-white border border-neutral-200 rounded-md divide-y divide-neutral-100 mt-4">
         <Section title="General">
-          <Field label="Receipt ID" value={receipt.id} mono />
           <Field label="Created" value={new Date(receipt.createdAt).toLocaleString()} />
           {receipt.finalizedAt && (
             <Field label="Finalized" value={new Date(receipt.finalizedAt).toLocaleString()} />
@@ -73,19 +84,19 @@ export default function ReceiptPage() {
         <Section title="Request">
           <Field label="Tool" value={receipt.toolName} mono />
           <Field label="Capability" value={receipt.capability} />
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-gray-500 w-28">Risk</span>
-            <RiskBadge level={receipt.riskLevel} />
-            {receipt.riskReasons.length > 0 && (
-              <span className="text-sm text-gray-600">{receipt.riskReasons.join(', ')}</span>
-            )}
+          <div className="flex items-start gap-2">
+            <span className="text-2xs text-neutral-400 w-28 shrink-0">Risk</span>
+            <div className="flex items-center gap-2">
+              <RiskBadge level={receipt.riskLevel} />
+              {receipt.riskReasons.length > 0 && (
+                <span className="text-sm text-neutral-600">{receipt.riskReasons.join(', ')}</span>
+              )}
+            </div>
           </div>
           {receipt.intent && <Field label="Intent" value={receipt.intent} />}
           <div>
-            <span className="text-xs text-gray-500">Redacted Args</span>
-            <pre className="text-xs bg-gray-50 p-3 rounded mt-1 overflow-auto border border-gray-100 font-mono">
-              {JSON.stringify(receipt.redactedArgs, null, 2)}
-            </pre>
+            <span className="text-2xs text-neutral-400">Redacted Args</span>
+            <pre className="code-block mt-1 max-h-48">{JSON.stringify(receipt.redactedArgs, null, 2)}</pre>
           </div>
         </Section>
 
@@ -114,8 +125,8 @@ export default function ReceiptPage() {
 
         {receipt.verificationStatus && (
           <Section title="Verification">
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-gray-500 w-28">Status</span>
+            <div className="flex items-start gap-2">
+              <span className="text-2xs text-neutral-400 w-28 shrink-0">Status</span>
               <VerificationBadge status={receipt.verificationStatus} />
             </div>
             {receipt.diffSummary && <Field label="Summary" value={receipt.diffSummary} />}
@@ -125,10 +136,8 @@ export default function ReceiptPage() {
         {receipt.signatureB64 && (
           <Section title="Signature">
             <div>
-              <span className="text-xs text-gray-500">Signature (base64)</span>
-              <pre className="text-xs bg-gray-50 p-2 rounded mt-1 overflow-auto border border-gray-100 font-mono break-all">
-                {receipt.signatureB64}
-              </pre>
+              <span className="text-2xs text-neutral-400">Signature (base64)</span>
+              <pre className="code-block mt-1 break-all max-h-48">{receipt.signatureB64}</pre>
             </div>
           </Section>
         )}
@@ -140,7 +149,7 @@ export default function ReceiptPage() {
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="p-5">
-      <h2 className="text-sm font-semibold text-gray-900 mb-3 uppercase tracking-wider">{title}</h2>
+      <h2 className="text-xs font-medium text-neutral-400 uppercase tracking-wide mb-3">{title}</h2>
       <div className="space-y-2">{children}</div>
     </div>
   );
@@ -149,8 +158,8 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 function Field({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
   return (
     <div className="flex items-start gap-2">
-      <span className="text-xs text-gray-500 w-28 shrink-0">{label}</span>
-      <span className={`text-sm ${mono ? 'font-mono text-gray-700' : 'text-gray-900'}`}>
+      <span className="text-2xs text-neutral-400 w-28 shrink-0">{label}</span>
+      <span className={`text-sm ${mono ? 'font-mono text-neutral-700' : 'text-neutral-800'}`}>
         {value}
       </span>
     </div>

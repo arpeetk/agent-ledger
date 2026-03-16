@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import type { Receipt } from '@/lib/api';
-import { StatusBadge, RiskBadge } from '@/components/StatusBadge';
+import { Skeleton } from '@/components/StatusBadge';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://127.0.0.1:3001';
 
@@ -20,6 +20,14 @@ interface SessionGroup {
     pending: number;
   };
 }
+
+const STATUS_DOT_COLOR: Record<string, string> = {
+  executed: 'bg-semantic-green',
+  denied: 'bg-semantic-red',
+  pending_approval: 'bg-semantic-amber',
+  failed: 'bg-semantic-red',
+  awaiting_execution: 'bg-semantic-blue',
+};
 
 export default function SessionsPage() {
   const [sessions, setSessions] = useState<SessionGroup[]>([]);
@@ -73,78 +81,65 @@ export default function SessionsPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold mb-6">Sessions</h1>
+      <h1 className="text-base font-semibold text-neutral-900 mb-4">Sessions</h1>
 
       {loading ? (
-        <p className="text-gray-500">Loading...</p>
+        <div className="space-y-3">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <Skeleton key={i} className="h-32 w-full" />
+          ))}
+        </div>
       ) : sessions.length === 0 ? (
-        <p className="text-gray-500">
-          No sessions yet. Run <code className="bg-gray-100 px-1 rounded">npm run demo</code> to
-          generate some.
+        <p className="text-neutral-400 text-center py-12">
+          No sessions yet. Run <code className="code-block inline px-1.5 py-0.5">npm run demo</code>{' '}
+          to generate some.
         </p>
       ) : (
-        <div className="space-y-4">
+        <div className="space-y-3">
           {sessions.map((session) => (
-            <div key={session.sessionId} className="bg-white border border-gray-200 rounded-lg p-5">
+            <div
+              key={session.sessionId}
+              className="bg-white border border-neutral-200 rounded-md p-4"
+            >
               <div className="flex items-center justify-between mb-3">
                 <div>
-                  <h2 className="font-mono text-sm font-medium text-gray-900">
-                    {session.sessionId.slice(0, 20)}...
-                  </h2>
-                  <p className="text-xs text-gray-500 mt-0.5">
-                    Agent: {session.agentId} &middot; {new Date(session.startedAt).toLocaleString()}
+                  <h2 className="text-sm font-medium text-neutral-900">{session.agentId}</h2>
+                  <p className="font-mono text-2xs text-neutral-400 mt-0.5">
+                    {session.sessionId.slice(0, 20)}... &middot;{' '}
+                    {new Date(session.startedAt).toLocaleString()}
                   </p>
                 </div>
-                <div className="flex gap-3 text-xs">
-                  <span className="bg-green-50 text-green-700 px-2 py-1 rounded">
-                    {session.stats.executed} executed
-                  </span>
+                <div className="flex gap-3 text-2xs">
+                  <StatDot color="bg-semantic-green" label="executed" count={session.stats.executed} />
                   {session.stats.denied > 0 && (
-                    <span className="bg-red-50 text-red-700 px-2 py-1 rounded">
-                      {session.stats.denied} denied
-                    </span>
+                    <StatDot color="bg-semantic-red" label="denied" count={session.stats.denied} />
                   )}
                   {session.stats.pending > 0 && (
-                    <span className="bg-yellow-50 text-yellow-700 px-2 py-1 rounded">
-                      {session.stats.pending} pending
-                    </span>
+                    <StatDot color="bg-semantic-amber" label="pending" count={session.stats.pending} />
                   )}
-                  <span className="bg-gray-50 text-gray-600 px-2 py-1 rounded">
-                    {session.stats.total} total
-                  </span>
+                  <span className="text-neutral-400">{session.stats.total} total</span>
                 </div>
               </div>
 
-              {/* Timeline of actions */}
-              <div className="relative ml-4 border-l-2 border-gray-200 pl-4 space-y-2">
+              <div className="relative ml-4 border-l border-neutral-200 pl-4 space-y-1">
                 {session.receipts.map((r) => (
                   <Link
                     key={r.id}
                     href={`/receipt/${r.id}`}
-                    className="block relative hover:bg-gray-50 rounded p-2 -ml-2 transition-colors"
+                    className="block relative row-hover rounded p-1.5 -ml-1.5"
                   >
                     <div
-                      className="absolute -left-[1.4rem] top-3 w-2.5 h-2.5 rounded-full border-2 border-white bg-gray-300"
-                      style={{
-                        backgroundColor:
-                          r.status === 'executed'
-                            ? '#22c55e'
-                            : r.status === 'denied'
-                              ? '#ef4444'
-                              : r.status === 'pending_approval'
-                                ? '#eab308'
-                                : '#9ca3af',
-                      }}
+                      className={`absolute -left-[1.15rem] top-2.5 w-2 h-2 rounded-full ${STATUS_DOT_COLOR[r.status] ?? 'bg-neutral-400'}`}
                     />
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono text-xs">{r.toolName}</span>
-                      <StatusBadge status={r.status} />
-                      <RiskBadge level={r.riskLevel} />
-                      <span className="text-xs text-gray-400 ml-auto">
+                    <div className="flex items-center gap-3">
+                      <span className="font-mono text-2xs text-neutral-700">{r.toolName}</span>
+                      <span className="text-2xs text-neutral-400">
+                        {r.policyDecision}
+                      </span>
+                      <span className="text-2xs text-neutral-400 ml-auto">
                         {new Date(r.createdAt).toLocaleTimeString()}
                       </span>
                     </div>
-                    {r.intent && <p className="text-xs text-gray-500 mt-0.5">{r.intent}</p>}
                   </Link>
                 ))}
               </div>
@@ -153,5 +148,14 @@ export default function SessionsPage() {
         </div>
       )}
     </div>
+  );
+}
+
+function StatDot({ color, label, count }: { color: string; label: string; count: number }) {
+  return (
+    <span className="inline-flex items-center gap-1 text-neutral-500">
+      <span className={`w-1.5 h-1.5 rounded-full ${color}`} />
+      {count} {label}
+    </span>
   );
 }
